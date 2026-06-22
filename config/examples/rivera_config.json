@@ -1,0 +1,85 @@
+{
+  "_comment": "FICTIONAL SAMPLE DATA -- the Rivera household. Entirely invented numbers used to demonstrate the toolkit end to end. The sample employer is a real public company (Coca-Cola, KO) purely so the live company-health demo pulls real data out of the box. Replace everything with your own values in config/config.json.",
+
+  "household": {
+    "name": "Rivera Household",
+    "members": [
+      { "id": "spouse_a", "display_name": "Jordan", "birth_year": 1974, "retirement_age": 57, "ss_claim_age": 67 },
+      { "id": "spouse_b", "display_name": "Sam", "birth_year": 1972, "retirement_age": 60, "ss_claim_age": 70 }
+    ],
+    "filing_status": "MFJ",
+    "state": "OH",
+    "state_income_tax_rate": 0.035,
+    "local_income_tax_rate": 0.02
+  },
+
+  "employer_stock": {
+    "employer_name": "Coca-Cola Company",
+    "ticker": "KO",
+    "sec_identity": "Sample User sample@example.com",
+    "major_holder_flag_name": null,
+    "watch_threshold_pct": 5.0,
+    "trim_threshold_pct": 7.0,
+    "holdings": {
+      "employer_stock_in_401k": 62000,
+      "unvested_rsu_value": 80000,
+      "vested_shares_value": 35000
+    }
+  },
+
+  "accounts": {
+    "spouse_a_401k_pretax": 480000,
+    "spouse_a_401k_roth": 60000,
+    "spouse_a_trad_ira": 220000,
+    "spouse_a_roth_ira": 115000,
+    "spouse_b_401k_pretax": 305000,
+    "spouse_b_401k_roth": 40000,
+    "spouse_b_trad_ira": 180000,
+    "spouse_b_roth_ira": 95000,
+    "joint_brokerage": 300000,
+    "hsa": 45000,
+    "cash_and_cds": 70000,
+    "deferred_comp": 55000,
+    "college_529_a": 38000,
+    "college_529_b": 96000
+  },
+
+  "real_estate": {
+    "primary_residence": 420000,
+    "other_property": 0
+  },
+
+  "income": {
+    "spouse_a_salary": 165000,
+    "spouse_a_bonus_pct": 0.15,
+    "spouse_a_rsu_annual": 25000,
+    "spouse_b_annual": 92000,
+    "pension_monthly_at_retirement": 2000,
+    "pension_cola": 0.02,
+    "passive_income_annual": 0
+  },
+
+  "social_security": {
+    "spouse_a_monthly_benefit": 2650,
+    "spouse_b_monthly_benefit": 3800
+  },
+
+  "assumptions": {
+    "portfolio_return_base": 0.075,
+    "portfolio_return_conservative": 0.055,
+    "portfolio_return_optimistic": 0.09,
+    "inflation_rate": 0.02,
+    "retirement_spend_annual": 120000,
+    "target_equity_pct": 65,
+    "target_bond_pct": 35,
+    "bridge_target": 600000,
+    "standard_deduction_mfj": 32200,
+    "irmaa_tier1_magi_mfj": 218000
+  },
+
+  "paths": {
+    "model_xlsx": "model/financial_plan.xlsx",
+    "dashboard_html": "dashboard/dashboard.html",
+    "market_intelligence_json": "market_intelligence.json"
+  }
+}

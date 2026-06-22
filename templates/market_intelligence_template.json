@@ -1,0 +1,45 @@
+{
+  "_instructions": [
+    "Optional. Written by company_health.py (or by hand) to feed the dashboard.",
+    "Ticker-agnostic: 'employer' fields apply to whatever ticker is in your config.",
+    "If absent, the dashboard simply omits the live company-health panel."
+  ],
+  "schema_version": "1.0",
+  "generated_at": null,
+  "as_of_quarter": null,
+
+  "employer": {
+    "_note": "Single-stock health for concentration monitoring (any ticker)",
+    "ticker": null,
+    "price": null,
+    "consensus_target_mean": null,
+    "upside_pct": null,
+    "analyst_consensus": null,
+    "forward_pe": null,
+    "dividend_yield_pct": null,
+    "ytd_return_pct": null,
+    "one_yr_return_pct": null,
+    "next_earnings_date": null,
+    "concentration_pct": null,
+    "insider_sentiment": null,
+    "insider_summary": null,
+    "form8k_count": null,
+    "form144_count": null
+  },
+
+  "rates": {
+    "_note": "Optional rates context for bond/bridge allocation",
+    "treasury_3m": null,
+    "treasury_2yr": null,
+    "treasury_10yr": null,
+    "fed_funds_target": null,
+    "curve_shape": null
+  },
+
+  "portfolio": {
+    "target_equity_pct": 65.0,
+    "target_bond_pct": 35.0,
+    "equity_drift_pp": null,
+    "rebalance_flag": null
+  }
+}

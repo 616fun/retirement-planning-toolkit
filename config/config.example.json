@@ -1,0 +1,86 @@
+{
+  "_comment": "Copy this file to config/config.json and fill in YOUR numbers. config.json is git-ignored so your real data never gets committed. Every downstream script reads from here -- this is the single source of truth for identity, accounts, and assumptions. See docs/ARCHITECTURE.md.",
+
+  "household": {
+    "name": "Your Household",
+    "members": [
+      { "id": "spouse_a", "display_name": "Person A", "birth_year": 1975, "retirement_age": 57, "ss_claim_age": 67 },
+      { "id": "spouse_b", "display_name": "Person B", "birth_year": 1973, "retirement_age": 60, "ss_claim_age": 70 }
+    ],
+    "filing_status": "MFJ",
+    "state": "XX",
+    "state_income_tax_rate": 0.04,
+    "local_income_tax_rate": 0.0
+  },
+
+  "employer_stock": {
+    "_comment": "Drives the company-health / RSU module. ticker can be any public company. concentration_pct fields are auto-computed by company_health.py but can be overridden.",
+    "employer_name": "Your Employer",
+    "ticker": "TICKER",
+    "sec_identity": "Your Name you@example.com",
+    "major_holder_flag_name": null,
+    "watch_threshold_pct": 5.0,
+    "trim_threshold_pct": 7.0,
+    "holdings": {
+      "employer_stock_in_401k": 0,
+      "unvested_rsu_value": 0,
+      "vested_shares_value": 0
+    }
+  },
+
+  "accounts": {
+    "spouse_a_401k_pretax": 0,
+    "spouse_a_401k_roth": 0,
+    "spouse_a_trad_ira": 0,
+    "spouse_a_roth_ira": 0,
+    "spouse_b_401k_pretax": 0,
+    "spouse_b_401k_roth": 0,
+    "spouse_b_trad_ira": 0,
+    "spouse_b_roth_ira": 0,
+    "joint_brokerage": 0,
+    "hsa": 0,
+    "cash_and_cds": 0,
+    "deferred_comp": 0,
+    "college_529_a": 0,
+    "college_529_b": 0
+  },
+
+  "real_estate": {
+    "primary_residence": 0,
+    "other_property": 0
+  },
+
+  "income": {
+    "spouse_a_salary": 0,
+    "spouse_a_bonus_pct": 0.0,
+    "spouse_a_rsu_annual": 0,
+    "spouse_b_annual": 0,
+    "pension_monthly_at_retirement": 0,
+    "pension_cola": 0.02,
+    "passive_income_annual": 0
+  },
+
+  "social_security": {
+    "spouse_a_monthly_benefit": 0,
+    "spouse_b_monthly_benefit": 0
+  },
+
+  "assumptions": {
+    "portfolio_return_base": 0.075,
+    "portfolio_return_conservative": 0.055,
+    "portfolio_return_optimistic": 0.09,
+    "inflation_rate": 0.02,
+    "retirement_spend_annual": 0,
+    "target_equity_pct": 65,
+    "target_bond_pct": 35,
+    "bridge_target": 0,
+    "standard_deduction_mfj": 32200,
+    "irmaa_tier1_magi_mfj": 218000
+  },
+
+  "paths": {
+    "model_xlsx": "model/financial_plan.xlsx",
+    "dashboard_html": "dashboard/dashboard.html",
+    "market_intelligence_json": "market_intelligence.json"
+  }
+}
