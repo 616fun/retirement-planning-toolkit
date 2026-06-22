@@ -13,6 +13,12 @@ run the whole thing end to end before entering a single real number.
 > **Illustrative only — not financial, tax, or investment advice.** See
 > [`DISCLAIMER.md`](DISCLAIMER.md).
 
+![Demo dashboard](docs/dashboard.png)
+
+*The dashboard running on the fictional demo household — net-worth tiles,
+employer-stock concentration with an OK / WATCH / TRIM verdict, a company-health
+snapshot, and Monte Carlo success rates.*
+
 ---
 
 ## Why this exists
