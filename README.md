@@ -1,7 +1,6 @@
 # Retirement Planning Toolkit
 
-<!-- After pushing, replace <you>/<repo> with your GitHub path so this badge renders. -->
-![CI](https://github.com/<you>/<repo>/actions/workflows/ci.yml/badge.svg)
+![CI](https://github.com/616fun/retirement-planning-toolkit/actions/workflows/ci.yml/badge.svg)
 ![License: MIT](https://img.shields.io/badge/License-MIT-green.svg)
 
 A config-driven, self-managed retirement planning kit: a multi-tab spreadsheet
