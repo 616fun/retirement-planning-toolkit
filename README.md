@@ -13,6 +13,11 @@ run the whole thing end to end before entering a single real number.
 > **Illustrative only — not financial, tax, or investment advice.** See
 > [`DISCLAIMER.md`](DISCLAIMER.md).
 
+> 🇨🇦 **In Canada?** There's a sibling edition built on this same engine —
+> [Canadian Retirement Planning Toolkit](https://github.com/616fun/retirement-planning-toolkit-canada) —
+> with RRSP/TFSA/RRIF/FHSA/RESP, CPP + OAS, the OAS clawback, and an RRSP-meltdown
+> lifetime-tax optimizer (federal + Ontario & Quebec).
+
 ![Demo dashboard](docs/dashboard.png)
 
 *The dashboard running on the fictional demo household — net-worth tiles,
