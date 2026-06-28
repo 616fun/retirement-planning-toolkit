@@ -25,6 +25,7 @@ sys.path.insert(0, str(Path(__file__).resolve().parent))
 from config_loader import (  # noqa: E402
     load_config, investable_total, employer_stock_total, employer_concentration_pct,
 )
+import plain_language  # noqa: E402
 
 ROOT = Path(__file__).resolve().parent.parent
 
@@ -33,6 +34,32 @@ def _kpi(label, value, sub=""):
     return (f'<div class="kpi"><div class="kpi-label">{html.escape(label)}</div>'
             f'<div class="kpi-value">{html.escape(str(value))}</div>'
             f'<div class="kpi-sub">{html.escape(sub)}</div></div>')
+
+
+def _plain_english_panel(cfg):
+    """Headline-first, plain-language summary -- the first thing a normal person
+    sees: can they retire, the moves that help most, and what to watch."""
+    try:
+        p = plain_language.plan_summary(cfg)
+    except Exception:                       # never let the human summary break the page
+        return ""
+    cls = {"green": "good", "yellow": "warn", "red": "bad"}.get(p["color"], "good")
+    actions = "".join(f"<li>{html.escape(a)}</li>" for a in p["actions"])
+    watch = "".join(f"<li>{html.escape(w)}</li>" for w in p["watch"])
+    spend = f"${p['monthly_spend']:,.0f}"
+    return f"""
+    <div class="panel" style="border-left:6px solid var(--{cls})">
+      <h2>Your plan, in plain English</h2>
+      <p class="conc-bignum {cls}" style="font-size:22px">{html.escape(p['headline'])}</p>
+      <p>The plan has you stop working at age <b>{p['retire_age']}</b>. It is built to
+         cover about <b>{spend}/month</b> and to keep up as prices rise.</p>
+      <p><b>The moves that help most</b></p>
+      <ol>{actions}</ol>
+      <p><b>A few things to watch</b></p>
+      <ol>{watch}</ol>
+      <p class="muted">A guide to help you plan &mdash; not formal financial advice.
+         Your real numbers may differ.</p>
+    </div>"""
 
 
 def _concentration_panel(cfg):
@@ -144,6 +171,7 @@ def render(cfg, mc=None, company_health=None):
 </header>
 {demo_banner}
 <div class="wrap">
+  {_plain_english_panel(cfg)}
   <div class="kpis">{tiles}</div>
   {_concentration_panel(cfg)}
   {_company_health_panel(company_health)}
