@@ -64,6 +64,12 @@
     "spouse_b_monthly_benefit": 3800
   },
 
+  "healthcare": {
+    "_comment": "ACA marketplace premium tax credit, pre-65. Set aca_benchmark_premium_annual to your area's benchmark (second-lowest-cost Silver) plan annual cost to enable; 0 or absent disables ACA modelling. See docs/US_RULES.md.",
+    "aca_household_size": 2,
+    "aca_benchmark_premium_annual": 18000
+  },
+
   "assumptions": {
     "portfolio_return_base": 0.075,
     "portfolio_return_conservative": 0.055,
@@ -74,7 +80,9 @@
     "target_bond_pct": 35,
     "bridge_target": 600000,
     "standard_deduction_mfj": 32200,
-    "irmaa_tier1_magi_mfj": 218000
+    "irmaa_tier1_magi_mfj": 218000,
+    "taxable_unrealized_gain_pct": 0.5,
+    "aca_enhanced_subsidies": false
   },
 
   "paths": {

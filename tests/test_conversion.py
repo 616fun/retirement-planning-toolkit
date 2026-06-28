@@ -47,28 +47,67 @@ def test_conversions_move_pretax_into_roth():
     assert opt["roth_end"] > none["roth_end"]
 
 
+def _modest_cfg():
+    # A smaller-balance, lower-spend household where the ACA cliff binds.
+    cfg = _cfg()
+    cfg["accounts"].update(spouse_a_401k_pretax=180000, spouse_a_trad_ira=60000,
+                           spouse_b_401k_pretax=120000, spouse_b_trad_ira=40000,
+                           joint_brokerage=250000, cash_and_cds=60000)
+    cfg["assumptions"]["retirement_spend_annual"] = 85000
+    cfg["healthcare"]["aca_benchmark_premium_annual"] = 20000
+    return cfg
+
+
 # ---- optimizer -----------------------------------------------------------
 def test_optimal_beats_do_nothing():
     best = bm._optimize_conversions(_cfg())
     none = bm._simulate_conversions(_cfg(), "none")
-    assert best["total_tax"] <= none["total_tax"]
+    assert best["net_cost"] <= none["net_cost"]
     assert best["target"] is not None
     assert not best["insolvent"]
 
 
 def test_heuristic_is_competitive_with_optimal():
-    # The fill-to-bracket heuristic should land near (never far below) optimal.
+    # The fill-to-bracket heuristic should land near (never below) the optimum.
     heur = bm._simulate_conversions(_cfg(), "bracket")
     best = bm._optimize_conversions(_cfg())
-    assert best["total_tax"] <= heur["total_tax"] + 1.0       # optimal is the floor
-    assert heur["total_tax"] <= 1.5 * best["total_tax"]       # heuristic within 50%
+    assert best["net_cost"] <= heur["net_cost"] + 1.0        # optimal is the floor
+    assert heur["net_cost"] <= 1.5 * best["net_cost"]        # heuristic within 50%
 
 
 def test_optimizer_is_deterministic():
     a = bm._optimize_conversions(_cfg())
     b = bm._optimize_conversions(_cfg())
     assert a["target"] == b["target"]
-    assert a["total_tax"] == pytest.approx(b["total_tax"])
+    assert a["net_cost"] == pytest.approx(b["net_cost"])
+
+
+# ---- ACA awareness (the Phase 1 correctness fix) -------------------------
+def test_net_cost_subtracts_aca_subsidy():
+    r = bm._simulate_conversions(_modest_cfg(), "none")   # low-MAGI baseline keeps ACA
+    assert r["lifetime_aca_subsidy"] > 0
+    assert r["net_cost"] == pytest.approx(r["total_tax"] - r["lifetime_aca_subsidy"])
+
+
+def test_aca_awareness_changes_the_optimum():
+    on = _modest_cfg()
+    off = copy.deepcopy(on)
+    off["healthcare"]["aca_benchmark_premium_annual"] = 0   # ACA-blind
+    b_on = bm._optimize_conversions(on)
+    b_off = bm._optimize_conversions(off)
+    assert b_on["lifetime_aca_subsidy"] > 0          # the optimum preserves real subsidy
+    assert b_on["target"] != b_off["target"]         # which the ACA-blind run ignores
+
+
+def test_aca_cliff_costs_subsidy_in_simulation():
+    # A moderate level conversion parks MAGI just over the 400% FPL cliff every
+    # pre-65 year, forfeiting the subsidy the low-MAGI do-nothing plan keeps.
+    # (Bunching conversions into one year would preserve more -- a time-varying
+    # schedule the level-target optimizer can only approximate; see Phase 2.)
+    cfg = _modest_cfg()
+    none = bm._simulate_conversions(cfg, "none")
+    midconv = bm._simulate_conversions(cfg, "optimal", target=70000.0)
+    assert none["lifetime_aca_subsidy"] > midconv["lifetime_aca_subsidy"]
 
 
 def test_no_income_tax_state_costs_less_than_taxed_state():
@@ -91,5 +130,5 @@ def test_ladder_tab_present_and_populated(tmp_path):
     wb.save(out)
     ws = openpyxl.load_workbook(out)["Roth Conversion Ladder"]
     cells = [c.value for row in ws.iter_rows() for c in row]
-    assert any(isinstance(v, str) and "Lifetime-tax optimal" in v for v in cells)
+    assert any(isinstance(v, str) and "Net-cost optimal" in v for v in cells)
     assert any(isinstance(v, str) and "Do nothing" in v for v in cells)

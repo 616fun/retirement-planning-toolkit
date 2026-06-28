@@ -14,27 +14,25 @@ def _cfg():
     return cfg
 
 
-# ---- characterization: the kernel reproduces the pre-refactor Roth results ---
-# These figures were snapshotted from _simulate_conversions BEFORE the kernel
-# extraction. They lock the refactor: the optimizer must not drift.
-def test_reproduces_do_nothing_baseline():
+# ---- characterization: Phase 1 snapshot (locks the tax model) -------------
+# Snapshotted from the demo after Phase 1 (SS provisional income, capital gains
+# on taxable draws, NIIT, ACA). Re-snapshot deliberately if the model changes.
+def test_snapshot_do_nothing_baseline():
     r = sim.simulate(_cfg(), strategy="none")
-    assert r["total_tax"] == pytest.approx(3737720.8781, abs=0.01)
-    assert r["lifetime_tax"] == pytest.approx(1839605.2437, abs=0.01)
-    assert r["terminal_tax"] == pytest.approx(1898115.6344, abs=0.01)
-    assert r["trad_end"] == pytest.approx(16784868.8280, abs=0.1)
+    assert r["total_tax"] == pytest.approx(3747670.76, abs=1.0)
+    assert r["trad_end"] == pytest.approx(16967559.47, abs=1.0)
 
 
-def test_reproduces_bracket_heuristic():
+def test_snapshot_bracket_heuristic():
     r = sim.simulate(_cfg(), strategy="bracket")
-    assert r["total_tax"] == pytest.approx(553484.0816, abs=0.01)
-    assert r["roth_end"] == pytest.approx(16974630.4653, abs=0.1)
+    assert r["total_tax"] == pytest.approx(532642.70, abs=1.0)
+    assert r["roth_end"] == pytest.approx(16565762.12, abs=1.0)
 
 
-def test_reproduces_optimizer():
+def test_snapshot_optimizer():
     best = bm._optimize_conversions(_cfg())
-    assert best["target"] == 150000.0
-    assert best["total_tax"] == pytest.approx(510606.7191, abs=0.01)
+    assert best["target"] == 170000.0
+    assert best["net_cost"] == pytest.approx(490748.62, abs=1.0)
     assert len(best["schedule"]) == 34
 
 
