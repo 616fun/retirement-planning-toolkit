@@ -66,7 +66,14 @@
     "spouse_b_monthly_benefit": 0
   },
 
+  "healthcare": {
+    "_comment": "ACA marketplace premium tax credit, pre-65. Set aca_benchmark_premium_annual to your area's benchmark (second-lowest-cost Silver) plan annual cost to enable; 0 or absent disables ACA modelling. See docs/US_RULES.md.",
+    "aca_household_size": 2,
+    "aca_benchmark_premium_annual": 0
+  },
+
   "assumptions": {
+    "_comment": "taxable_unrealized_gain_pct = embedded-gain share of the taxable pool (drives capital gains on draws); override per-account with accounts.taxable_cost_basis. aca_enhanced_subsidies=false models the current-law 400% FPL cliff returning post-2025; set true for the ARPA/IRA 8.5% cap with no cliff.",
     "portfolio_return_base": 0.075,
     "portfolio_return_conservative": 0.055,
     "portfolio_return_optimistic": 0.09,
@@ -76,7 +83,9 @@
     "target_bond_pct": 35,
     "bridge_target": 0,
     "standard_deduction_mfj": 32200,
-    "irmaa_tier1_magi_mfj": 218000
+    "irmaa_tier1_magi_mfj": 218000,
+    "taxable_unrealized_gain_pct": 0.5,
+    "aca_enhanced_subsidies": false
   },
 
   "paths": {

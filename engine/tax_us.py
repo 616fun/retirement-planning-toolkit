@@ -169,6 +169,120 @@ def marginal_rate(agi, cfg, year=BASE_YEAR, infl=0.02, step=100.0):
     return (up - base) / step
 
 
+# ============================================================================
+# Phase 1 -- capital gains, NIIT, Social Security taxation, and ACA subsidies.
+# These all read off the same MAGI the kernel computes once per year.
+# ============================================================================
+
+# ---- Social Security taxation (IRC sec. 86) -------------------------------
+# Provisional-income thresholds are STATUTORY and NOT inflation-indexed (frozen
+# since 1993) -- so across a multi-decade plan a rising share of SS becomes
+# taxable (the "tax torpedo"). Do NOT index these.
+SS_PI_BASE1_MFJ = 32000.0
+SS_PI_BASE2_MFJ = 44000.0
+
+
+def ss_taxable_amount(ss_total, other_income):
+    """Taxable portion of Social Security (MFJ, IRC sec. 86). `other_income` is
+    AGI excluding SS (pension + IRA/conversions + wages + capital gains + ...).
+    Replaces the flat 85% assumption with the real 0/50/85% provisional tiers."""
+    if ss_total <= 0:
+        return 0.0
+    pi = other_income + 0.5 * ss_total
+    if pi <= SS_PI_BASE1_MFJ:
+        return 0.0
+    if pi <= SS_PI_BASE2_MFJ:
+        return min(0.5 * ss_total, 0.5 * (pi - SS_PI_BASE1_MFJ))
+    lower_band = min(0.5 * ss_total, 0.5 * (SS_PI_BASE2_MFJ - SS_PI_BASE1_MFJ))
+    return min(0.85 * ss_total, 0.85 * (pi - SS_PI_BASE2_MFJ) + lower_band)
+
+
+# ---- Long-term capital gains (stacked on top of ordinary taxable income) ---
+# MFJ breakpoints are taxable-income thresholds; the gain fills the 0/15/20%
+# bands ABOVE ordinary taxable income. Breakpoints index with inflation.
+CAP_GAINS_BRACKETS_MFJ = [(0.0, 96950), (0.15, 600050), (0.20, None)]  # 2026 VERIFY
+
+
+def capital_gains_tax(ordinary_taxable, gain, year=BASE_YEAR, infl=0.02):
+    """LTCG tax: stack `gain` on top of `ordinary_taxable` and tax the slice in
+    each 0/15/20% band at that band's rate."""
+    if gain <= 0:
+        return 0.0
+    lo = max(0.0, ordinary_taxable)
+    top = lo + gain
+    tax, prev = 0.0, 0.0
+    for rate, edge in CAP_GAINS_BRACKETS_MFJ:
+        hi = float("inf") if edge is None else edge * _f(year, infl)
+        seg_lo, seg_hi = max(lo, prev), min(top, hi)
+        if seg_hi > seg_lo:
+            tax += rate * (seg_hi - seg_lo)
+        prev = hi
+        if top <= hi:
+            break
+    return tax
+
+
+# ---- Net Investment Income Tax (NIIT) -------------------------------------
+NIIT_RATE = 0.038
+NIIT_THRESHOLD_MFJ = 250000.0   # statutory, NOT inflation-indexed
+
+
+def niit(net_investment_income, magi):
+    """3.8% on the lesser of net investment income and MAGI over $250k (MFJ)."""
+    if net_investment_income <= 0 or magi <= NIIT_THRESHOLD_MFJ:
+        return 0.0
+    return NIIT_RATE * min(net_investment_income, magi - NIIT_THRESHOLD_MFJ)
+
+
+# ---- ACA premium tax credit -----------------------------------------------
+# Federal Poverty Level (48 contiguous states; prior year's FPL applies to a
+# coverage year). Updated annually -- indexed here ~ inflation.
+FPL_BASE_1PERSON = 15060.0       # 2025 FPL VERIFY
+FPL_PER_ADDL_PERSON = 5380.0     # VERIFY
+ACA_CLIFF_FPL = 4.00             # 400% FPL subsidy cliff (current law, post-2025)
+
+
+def federal_poverty_level(household_size, year=BASE_YEAR, infl=0.02):
+    base = FPL_BASE_1PERSON + FPL_PER_ADDL_PERSON * (max(1, household_size) - 1)
+    return base * _f(year, infl)
+
+
+def aca_applicable_pct(fpl_ratio, enhanced=False):
+    """Share of MAGI the household is expected to contribute toward the
+    benchmark plan, at a given % of FPL. Two regimes:
+      enhanced=False -- current law (pre-ARPA): ~2.06% at 150% FPL rising to
+                        ~9.83% at 400%, then the cliff (handled by caller).
+      enhanced=True  -- ARPA/IRA: 0% at <=150% FPL rising to 8.5% at 400%, flat
+                        above (no cliff)."""
+    r = max(1.0, fpl_ratio)
+    if enhanced:
+        if r <= 1.5:
+            return 0.0
+        if r >= 4.0:
+            return 0.085
+        return 0.085 * (r - 1.5) / (4.0 - 1.5)
+    if r < 1.5:
+        return 0.0206
+    if r >= 4.0:
+        return 0.0983
+    return 0.0206 + (0.0983 - 0.0206) * (r - 1.5) / (4.0 - 1.5)
+
+
+def aca_subsidy(magi, household_size, benchmark_premium, year=BASE_YEAR,
+                infl=0.02, enhanced=False):
+    """Annual ACA premium tax credit. Returns 0 when no benchmark premium is
+    supplied (feature off) or -- under current law -- when MAGI exceeds the 400%
+    FPL cliff. Subsidy = benchmark premium minus the expected contribution."""
+    if benchmark_premium <= 0 or magi <= 0:
+        return 0.0
+    fpl = federal_poverty_level(household_size, year, infl)
+    ratio = magi / fpl if fpl > 0 else 0.0
+    if not enhanced and ratio > ACA_CLIFF_FPL:
+        return 0.0    # the subsidy cliff
+    expected = aca_applicable_pct(ratio, enhanced=enhanced) * magi
+    return max(0.0, benchmark_premium - expected)
+
+
 if __name__ == "__main__":
     # Minimal self-check against a flat-tax (Indiana-like) household.
     demo = {"household": {"state_income_tax_rate": 0.03, "local_income_tax_rate": 0.0},

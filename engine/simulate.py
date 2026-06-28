@@ -145,6 +145,20 @@ def simulate(cfg, *, returns=None, strategy="none", target=None, horizon=None):
     taxable = taxable_total(cfg)
     re_total = real_estate_total(cfg)
 
+    # Cost basis for the taxable pool -> capital gains realized on draws. Use an
+    # explicit basis if configured, else infer it from an assumed unrealized-gain
+    # fraction (default 50% of the pool is embedded gain).
+    gain_pct = a.get("taxable_unrealized_gain_pct", 0.5)
+    taxable_basis = float(cfg["accounts"].get("taxable_cost_basis",
+                                              taxable * (1.0 - gain_pct)))
+
+    # ACA premium-tax-credit inputs (pre-65 marketplace coverage). Feature is off
+    # unless a benchmark premium is configured under cfg["healthcare"].
+    hc = cfg.get("healthcare", {})
+    aca_benchmark0 = float(hc.get("aca_benchmark_premium_annual", 0) or 0)
+    aca_hh_size = int(hc.get("aca_household_size", 2) or 2)
+    aca_enhanced = bool(a.get("aca_enhanced_subsidies", False))
+
     pension_m, cola = inc["pension_monthly_at_retirement"], inc["pension_cola"]
     passive0 = inc["passive_income_annual"]
     b_salary0 = inc["spouse_b_annual"]
@@ -153,9 +167,33 @@ def simulate(cfg, *, returns=None, strategy="none", target=None, horizon=None):
 
     if horizon is None:
         horizon = max(1, 90 - a_age0)
-    lifetime_tax, insolvent = 0.0, False
+    lifetime_tax, lifetime_aca, insolvent = 0.0, 0.0, False
     ledger, schedule = [], []
-    magi_history = {}                        # year_index -> AGI, for IRMAA lookback
+    magi_history = {}                        # year_index -> MAGI, for IRMAA lookback
+
+    # Draw `amount` from taxable -> pre-tax -> Roth, realizing proportional
+    # capital gains on the taxable slice and amortizing basis. Mutates the pools
+    # and the per-year draw/gain accumulators in place.
+    draw_taxable = draw_trad = draw_roth = realized_gain = 0.0
+
+    def _pull(amount):
+        nonlocal taxable, taxable_basis, trad, roth
+        nonlocal draw_taxable, draw_trad, draw_roth, realized_gain, insolvent
+        short = amount
+        if short <= 0:
+            return
+        if taxable > 0:
+            take = min(taxable, short)
+            gfrac = max(0.0, (taxable - taxable_basis) / taxable)
+            realized_gain += take * gfrac
+            taxable_basis -= take * (1.0 - gfrac)
+            taxable -= take; short -= take; draw_taxable += take
+        if short > 0:
+            take = min(trad, short); trad -= take; short -= take; draw_trad += take
+        if short > 0:
+            take = min(roth, short); roth -= take; short -= take; draw_roth += take
+        if short > 1.0:
+            insolvent = True
 
     for n in range(0, horizon + 1):
         year = base_year + n
@@ -179,12 +217,11 @@ def simulate(cfg, *, returns=None, strategy="none", target=None, horizon=None):
         ss_a = ss_a0 * idx if a_age >= a_ss else 0.0
         ss_b = ss_b0 * idx if b_age >= b_ss else 0.0
         ss_total = ss_a + ss_b
-        ss_taxable = tax_us.SS_TAXABLE_FRACTION * ss_total
 
         forced = min(trad * rmd_factor(a_age) if a_age >= a_rmd_start else 0.0, trad)
-        base_ordinary = pension + passive + b_work + ss_taxable + forced
+        non_ss = pension + passive + b_work + forced     # non-SS ordinary income
 
-        # ---- choose the conversion amount ----
+        # ---- choose the conversion amount (fills ordinary income to a ceiling) ----
         irmaa_ceiling = tax_us.irmaa_tier1_magi(year, infl)
         if strategy == "none":
             conversion = 0.0
@@ -194,47 +231,60 @@ def simulate(cfg, *, returns=None, strategy="none", target=None, horizon=None):
             if (a_age >= tax_us.MEDICARE_AGE - tax_us.IRMAA_LOOKBACK_YEARS
                     or b_age >= tax_us.MEDICARE_AGE - tax_us.IRMAA_LOOKBACK_YEARS):
                 ceiling_agi = min(ceiling_agi, irmaa_ceiling)
-            conversion = max(0.0, min(ceiling_agi - base_ordinary, trad - forced))
+            conversion = max(0.0, min(ceiling_agi - non_ss, trad - forced))
         else:  # optimal -- fill to a level real target (today's $ AGI)
             ceiling_agi = target * idx
-            conversion = max(0.0, min(ceiling_agi - base_ordinary, trad - forced))
+            conversion = max(0.0, min(ceiling_agi - non_ss, trad - forced))
 
         trad -= conversion
         roth += conversion
-        agi = base_ordinary + conversion
 
-        # ---- tax: IRMAA keys off MAGI from two years prior, once on Medicare ----
+        # ---- Social Security taxed via provisional income (IRC sec. 86) ----
+        non_ss_ord = non_ss + conversion
+        ss_taxable = tax_us.ss_taxable_amount(ss_total, non_ss_ord)
+        ordinary_agi = non_ss_ord + ss_taxable
+        ordinary_taxable = max(0.0, ordinary_agi - std)
+
+        # ---- ordinary income tax (fed + state) + the 2-yr-lookback IRMAA ----
         n_medicare = (1 if a_age >= tax_us.MEDICARE_AGE else 0) + \
                      (1 if b_age >= tax_us.MEDICARE_AGE else 0)
-        magi_look = magi_history.get(n - tax_us.IRMAA_LOOKBACK_YEARS, agi)
-        magi_history[n] = agi
-        fed = tax_us.federal_tax(agi, year, infl, std0)
-        st = tax_us.state_tax(agi, cfg, year, infl, ss_income=ss_taxable)
+        fed = tax_us.federal_tax(ordinary_agi, year, infl, std0)
+        st = tax_us.state_tax(ordinary_agi, cfg, year, infl, ss_income=ss_taxable)
+        magi_look = magi_history.get(n - tax_us.IRMAA_LOOKBACK_YEARS, ordinary_agi)
         irmaa = tax_us.irmaa_annual(magi_look, year, infl, n_enrolled=n_medicare)
-        year_tax = fed + st + irmaa
+
+        # ---- fund spending; realize capital gains on the taxable draws ----
+        draw_taxable = draw_trad = draw_roth = realized_gain = 0.0
+        income_cash = pension + passive + ss_total + b_work + forced
+        net = income_cash - (fed + st + irmaa)
+        if net >= spend:
+            surplus = net - spend
+            taxable += surplus; taxable_basis += surplus   # after-tax cash = basis
+        else:
+            _pull(spend - net)
+        # capital-gains + NIIT on the gains realized while funding the shortfall
+        cg_tax = tax_us.capital_gains_tax(ordinary_taxable, realized_gain, year, infl)
+        magi = ordinary_agi + realized_gain
+        niit_tax = tax_us.niit(realized_gain, magi)
+        if cg_tax + niit_tax > 0:
+            _pull(cg_tax + niit_tax)        # 2nd-pass draw to cover investment tax
+        year_tax = fed + st + irmaa + cg_tax + niit_tax
+        magi_history[n] = magi
         lifetime_tax += year_tax / ((1 + infl) ** n)   # present value, today's $
 
-        # ---- fund spending; conversion tax is embedded in year_tax ----
-        income_cash = pension + passive + ss_total + b_work + forced
-        net = income_cash - year_tax
-        draw_taxable = draw_trad = draw_roth = 0.0
-        if net >= spend:
-            taxable += (net - spend)
-        else:
-            short = spend - net
-            draw_taxable = min(taxable, short); taxable -= draw_taxable; short -= draw_taxable
-            if short > 0:
-                draw_trad = min(trad, short); trad -= draw_trad; short -= draw_trad
-            if short > 0:
-                draw_roth = min(roth, short); roth -= draw_roth; short -= draw_roth
-            if short > 1.0:
-                insolvent = True
+        # ---- ACA premium tax credit (pre-65 marketplace years) ----
+        aca = 0.0
+        if aca_benchmark0 > 0 and min(a_age, b_age) < tax_us.MEDICARE_AGE:
+            aca = tax_us.aca_subsidy(magi, aca_hh_size, aca_benchmark0 * idx,
+                                     year, infl, enhanced=aca_enhanced)
+        lifetime_aca += aca / ((1 + infl) ** n)
 
-        # Backward-compatible schedule row (exact keys the Roth tab reads).
+        # Backward-compatible schedule row (exact keys the Roth tab reads) + extras.
         schedule.append({
             "year": year, "a_age": a_age, "b_age": b_age,
-            "base_ordinary": base_ordinary, "forced": forced, "conversion": conversion,
-            "agi": agi, "tax": fed + st, "irmaa": irmaa, "magi_look": magi_look,
+            "base_ordinary": non_ss + ss_taxable, "forced": forced, "conversion": conversion,
+            "agi": magi, "tax": fed + st, "irmaa": irmaa, "magi_look": magi_look,
+            "cg_tax": cg_tax, "niit": niit_tax, "aca": aca,
             "trad": trad, "roth": roth,
             "over": irmaa > 0,
         })
@@ -243,20 +293,27 @@ def simulate(cfg, *, returns=None, strategy="none", target=None, horizon=None):
             "year": year, "a_age": a_age, "b_age": b_age, "phase": "retired",
             "pension": pension, "passive": passive, "wages": b_work,
             "ss_total": ss_total, "ss_taxable": ss_taxable, "rmd": forced,
-            "conversion": conversion, "agi": agi, "magi": magi_look,
-            "fed_tax": fed, "state_tax": st, "irmaa": irmaa, "total_tax": year_tax,
-            "spend": spend, "draw_taxable": draw_taxable, "draw_trad": draw_trad,
-            "draw_roth": draw_roth, "trad": trad, "roth": roth, "taxable": taxable,
+            "conversion": conversion, "agi": ordinary_agi, "magi": magi,
+            "cap_gains": realized_gain, "fed_tax": fed, "state_tax": st,
+            "cg_tax": cg_tax, "niit": niit_tax, "irmaa": irmaa, "aca_subsidy": aca,
+            "total_tax": year_tax, "spend": spend,
+            "draw_taxable": draw_taxable, "draw_trad": draw_trad, "draw_roth": draw_roth,
+            "trad": trad, "roth": roth, "taxable": taxable,
             "portfolio": trad + roth + taxable, "net_worth": trad + roth + taxable + re_total,
         })
 
     # ---- terminal tax: pre-tax balance left to heirs (SECURE 10-year rule) ----
     terminal_tax = (trad * tax_us.HEIR_MARGINAL_RATE) / ((1 + infl) ** horizon)
     total_tax = lifetime_tax + terminal_tax
+    # Net lifetime cost = taxes paid MINUS ACA subsidy preserved. This is what
+    # the optimizer minimizes, so it won't over-convert in the 55-65 window and
+    # forfeit premium tax credits.
+    net_cost = total_tax - lifetime_aca
     estate = trad + roth + taxable
     return {
         "strategy": strategy, "target": target,
         "lifetime_tax": lifetime_tax, "terminal_tax": terminal_tax, "total_tax": total_tax,
+        "lifetime_aca_subsidy": lifetime_aca, "net_cost": net_cost,
         "trad_end": trad, "roth_end": roth, "taxable_end": taxable, "estate_end": estate,
         "insolvent": insolvent, "ledger": ledger, "schedule": schedule,
     }
@@ -268,7 +325,8 @@ def _working_row(year, a_age, b_age, trad, roth, taxable, re_total):
         "year": year, "a_age": a_age, "b_age": b_age, "phase": "working",
         "pension": 0.0, "passive": 0.0, "wages": 0.0, "ss_total": 0.0,
         "ss_taxable": 0.0, "rmd": 0.0, "conversion": 0.0, "agi": 0.0, "magi": 0.0,
-        "fed_tax": 0.0, "state_tax": 0.0, "irmaa": 0.0, "total_tax": 0.0,
+        "cap_gains": 0.0, "fed_tax": 0.0, "state_tax": 0.0, "cg_tax": 0.0,
+        "niit": 0.0, "irmaa": 0.0, "aca_subsidy": 0.0, "total_tax": 0.0,
         "spend": 0.0, "draw_taxable": 0.0, "draw_trad": 0.0, "draw_roth": 0.0,
         "trad": trad, "roth": roth, "taxable": taxable,
         "portfolio": trad + roth + taxable, "net_worth": trad + roth + taxable + re_total,

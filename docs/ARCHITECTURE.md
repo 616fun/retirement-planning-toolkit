@@ -41,7 +41,7 @@ of hardcoding values. When you add a value, put it in `Assumptions` and link to 
 | Income Streams | Salary, bonus, RSU, pension, passive |
 | Employer Concentration | Employer-stock exposure vs. watch/trim thresholds |
 | Year-by-Year Projections | After-tax baseline (RMD-only) from the kernel — spend, income floor, tax, portfolio draw, EOY balance to age ~90 |
-| Cash Flow | Detailed after-tax ledger from the kernel — every income source, AGI/MAGI, federal/state/IRMAA tax, per-account withdrawals, and running pre-tax / Roth / taxable balances |
+| Cash Flow | Detailed after-tax ledger from the kernel — every income source, AGI/MAGI, federal/state/IRMAA/cap-gains/NIIT tax, ACA subsidy, per-account withdrawals, and running pre-tax / Roth / taxable balances |
 | Monte Carlo | 3-scenario success rates (populated by quarterly_update.py) |
 | Roth Conversion Ladder | Lifetime-tax optimizer (`engine/tax_us.py`) — do-nothing vs. fill-to-bracket heuristic vs. optimal target, with a year-by-year schedule |
 | Action Plan | Open items and recurring checks |

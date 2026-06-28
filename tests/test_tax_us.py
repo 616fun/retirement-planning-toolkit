@@ -113,3 +113,68 @@ def test_total_tax_sums_components():
               + tax_us.state_tax(agi, FLAT)
               + tax_us.irmaa_annual(agi, n_enrolled=2))
     assert tax_us.total_tax(agi, FLAT, magi=agi, n_medicare=2) == pytest.approx(expect)
+
+
+# ---- Social Security taxation (IRC sec. 86) ------------------------------
+def test_ss_taxable_tiers():
+    ss = 40000
+    assert tax_us.ss_taxable_amount(ss, 0) == 0.0               # all under base 1
+    assert tax_us.ss_taxable_amount(ss, 30000) == pytest.approx(11100, abs=1)
+    assert tax_us.ss_taxable_amount(ss, 200000) == pytest.approx(0.85 * ss, abs=1)
+
+
+def test_ss_taxable_is_monotonic_and_capped():
+    ss, prev = 50000, -1.0
+    for other in (0, 20000, 40000, 60000, 100000):
+        v = tax_us.ss_taxable_amount(ss, other)
+        assert v >= prev and v <= 0.85 * ss + 1e-6
+        prev = v
+
+
+def test_ss_thresholds_are_not_indexed():
+    assert tax_us.SS_PI_BASE1_MFJ == 32000.0 and tax_us.SS_PI_BASE2_MFJ == 44000.0
+
+
+# ---- capital gains (stacked on ordinary taxable income) ------------------
+def test_zero_gain_is_zero():
+    assert tax_us.capital_gains_tax(50000, 0) == 0.0
+
+
+def test_gain_in_zero_bracket_when_income_low():
+    assert tax_us.capital_gains_tax(0, 50000) == 0.0           # whole gain at 0%
+
+
+def test_gain_crosses_into_15_and_20():
+    assert tax_us.capital_gains_tax(650000, 100000) == pytest.approx(20000, abs=5)
+    t = tax_us.capital_gains_tax(90000, 100000)               # straddles 0%/15%
+    assert 0 < t < 15000
+
+
+# ---- NIIT ----------------------------------------------------------------
+def test_niit_below_threshold_is_zero():
+    assert tax_us.niit(80000, 200000) == 0.0
+
+
+def test_niit_is_lesser_of_nii_and_excess():
+    assert tax_us.niit(80000, 300000) == pytest.approx(0.038 * 50000)   # excess binds
+    assert tax_us.niit(20000, 500000) == pytest.approx(0.038 * 20000)   # NII binds
+
+
+# ---- ACA premium tax credit ----------------------------------------------
+def test_aca_off_without_benchmark():
+    assert tax_us.aca_subsidy(40000, 2, 0) == 0.0
+
+
+def test_aca_subsidy_falls_as_income_rises():
+    assert tax_us.aca_subsidy(40000, 2, 18000) > tax_us.aca_subsidy(70000, 2, 18000) > 0
+
+
+def test_aca_cliff_under_current_law():
+    fpl = tax_us.federal_poverty_level(2)
+    assert tax_us.aca_subsidy(4.0 * fpl - 500, 2, 18000, enhanced=False) > 0
+    assert tax_us.aca_subsidy(4.0 * fpl + 500, 2, 18000, enhanced=False) == 0.0  # cliff
+
+
+def test_aca_enhanced_has_no_cliff():
+    fpl = tax_us.federal_poverty_level(2)
+    assert tax_us.aca_subsidy(4.0 * fpl + 5000, 2, 18000, enhanced=True) > 0.0

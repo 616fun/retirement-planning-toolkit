@@ -135,36 +135,101 @@ November release for the following year).
 - RMDs are modelled on the **pooled** pre-tax balance using spouse A's age — a
   simplification; in reality each spouse's RMD is computed on their own IRAs.
 
+## Social Security taxation — provisional income (IRC §86)
+
+Replaces the old flat-85% assumption with the real 0/50/85% inclusion tiers.
+*Provisional income* = AGI-excluding-SS + ½·SS.
+
+| Threshold (MFJ) | Value | Source |
+|---|---|---|
+| Base amount 1 | $32,000 | IRC §86; IRS Pub. 915 |
+| Base amount 2 | $44,000 | IRC §86; IRS Pub. 915 |
+
+- **These thresholds are statutory and NOT inflation-indexed** (frozen since
+  1993), so over a multi-decade plan a rising share of SS becomes taxable — the
+  "tax torpedo." The engine deliberately does **not** index them.
+
+## Capital gains, NIIT — `tax_us.py`
+
+Draws from the taxable brokerage realize proportional long-term gains (basis is
+tracked); the gain stacks on top of ordinary taxable income through the 0/15/20%
+bands.
+
+| Item | Value (MFJ, 2026) | Source |
+|---|---|---|
+| LTCG 0% bracket top (taxable income) | $96,950 | IRS annual inflation adjustment ⚠ VERIFY |
+| LTCG 15% bracket top | $600,050 | IRS annual inflation adjustment ⚠ VERIFY |
+| LTCG 20% | above | statutory |
+| NIIT rate | 3.8% | IRC §1411 |
+| NIIT MAGI threshold | $250,000 | IRC §1411 — **not** inflation-indexed |
+
+- Cost basis comes from `accounts.taxable_cost_basis`, else an assumed
+  `assumptions.taxable_unrealized_gain_pct` (default 50%). The 0% LTCG bracket is
+  a real early-retirement lever (gain harvesting) the engine now captures.
+- NIIT here counts realized capital gains as the investment income; dividends and
+  interest are not separately modelled.
+
+## ACA premium tax credit — `tax_us.py`
+
+Pre-65 marketplace subsidy, MAGI-driven. Enabled by setting
+`healthcare.aca_benchmark_premium_annual` (your area's second-lowest-cost Silver
+plan). The **`assumptions.aca_enhanced_subsidies` flag (default false)** models
+current law — the **400% FPL subsidy cliff returns** after the ARPA/IRA enhanced
+credits expire at the end of 2025; set it true for the 8.5%-cap, no-cliff regime.
+
+| Item | Value | Source |
+|---|---|---|
+| Federal Poverty Level, 1 person | $15,060 | HHS 2025 FPL guidelines ⚠ VERIFY |
+| FPL per additional person | $5,380 | HHS 2025 ⚠ VERIFY |
+| Subsidy cliff (current law) | 400% FPL | ACA / IRC §36B |
+| Applicable-% schedule | ~2.0%→9.83% (current law) / 0%→8.5% (enhanced) | IRS Rev. Proc. (annual) ⚠ VERIFY |
+
+- ⚠ **VERIFY the FPL table and applicable-percentage schedule each year** — both
+  are released annually, and whether the enhanced subsidies are extended is a live
+  legislative question. The applicable-% schedule here is a piecewise-linear
+  approximation of the IRS table.
+- **Why this matters most:** for an early retiree, ACA MAGI management is often a
+  *harder* constraint than IRMAA, and capital gains alone (from funding spending)
+  can blow through the cliff before any Roth conversion. The optimizer minimizes
+  net cost (tax − subsidy) so it accounts for the tradeoff.
+
 ## The optimizer's objective
 
-Total lifetime tax (what we minimize) =
+Net lifetime cost (what we minimize) =
 
-> **PV**( Σ yearly [ federal + state/local + IRMAA ] ) **+** PV( terminal tax )
+> **PV**( Σ yearly [ federal + state/local + IRMAA + capital-gains + NIIT ] )
+> **+** PV( terminal tax ) **−** PV( ACA subsidy preserved )
 
 where the **terminal tax** is what heirs pay on the pre-tax balance still
 standing at age 90, drawn down under the SECURE Act 10-year rule (SECURE Act of
 2019, §401 — non-eligible designated beneficiaries) at `HEIR_MARGINAL_RATE`
 (24% — an **assumption**, not a sourced figure: a planning rate for early-career
-heirs). Roth dollars pass tax-free. Present-valuing at the inflation rate is what trades "pay
-tax now at known rates" against "defer and face RMD-driven tax, IRMAA, and heir
-tax later" — producing an **interior** optimum rather than "convert everything
-immediately."
+heirs). Roth dollars pass tax-free. Subtracting the ACA subsidy is the key
+Phase 1 fix: it stops the optimizer from over-converting in the pre-65 window and
+forfeiting premium tax credits. Present-valuing at inflation trades "pay tax now
+at known rates" against "defer and face RMD-driven tax, IRMAA, lost ACA, and heir
+tax later" — producing an **interior** optimum.
 
 Three strategies are compared in the **Roth Conversion Ladder** tab:
 
 1. **Do nothing** — RMDs only (baseline).
 2. **Fill to top of 22% bracket** — the readable heuristic, capped at the IRMAA
    Tier-1 line inside the Medicare lookback window.
-3. **Lifetime-tax optimal** — grid-searches the level real AGI ceiling that
-   minimizes total lifetime tax, subject to solvency.
+3. **Net-cost optimal** — grid-searches the level real AGI ceiling that minimizes
+   net lifetime cost, subject to solvency.
+
+> **Known limitation:** the optimizer searches a single *level* conversion
+> target. The true ACA optimum is often time-varying (bunch conversions into one
+> year, then stay under the cliff) — the level-target search only approximates
+> this. A time-varying schedule is roadmapped for a later phase.
 
 ## Not modelled (by design)
 
-NIIT (3.8%), capital-gains preferential rates, AMT, the QBI deduction,
-per-state retirement-income exclusions, and spousal IRA splitting. These are
-either second-order for a conversion decision or state-idiosyncratic. Keep them
-in mind when reading the absolute tax figures — the **relative** comparison
-between strategies is the robust output.
+AMT, the QBI deduction, the dividend/interest split of investment income,
+per-state retirement-income exclusions, spousal IRA splitting, and time-varying
+conversion schedules. These are either second-order for a conversion decision,
+state-idiosyncratic, or roadmapped. Keep them in mind when reading the absolute
+tax figures — the **relative** comparison between strategies is the robust output.
 
 ## Sources & primary references
 
@@ -181,6 +246,12 @@ shipped here.
 | RMD Uniform Lifetime Table | IRS Pub. 590-B, Appendix B — <https://www.irs.gov/pub/irs-pdf/p590b.pdf> |
 | RMD beginning ages (73 / 75) | SECURE 2.0 Act of 2022, §107 (Div. T, Consolidated Appropriations Act 2023, P.L. 117-328) |
 | Inherited-IRA 10-year rule | SECURE Act of 2019, §401 |
+| Social Security provisional-income thresholds | IRC §86; IRS Pub. 915 — <https://www.irs.gov/pub/irs-pdf/p915.pdf> |
+| Long-term capital-gains brackets (annual $ figures) | IRS annual inflation-adjustment Revenue Procedure |
+| Net Investment Income Tax (3.8%, $250k MFJ) | IRC §1411; IRS Form 8960 instructions |
+| ACA premium tax credit / applicable % | IRC §36B; IRS Rev. Proc. (annual) — <https://www.irs.gov/affordable-care-act> |
+| Federal Poverty Level guidelines | HHS ASPE poverty guidelines — <https://aspe.hhs.gov/poverty-guidelines> |
+| Enhanced-subsidy expiration (post-2025 cliff) | ARPA 2021 / IRA 2022 sunset — verify current legislative status |
 
 **⚠ VERIFY** tags above mark figures that are released annually and most warrant
 an independent check: the IRMAA surcharge dollars and tier floors, and the

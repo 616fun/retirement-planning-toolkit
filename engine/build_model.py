@@ -203,8 +203,9 @@ def build_cash_flow(wb, cfg):
     _title(ws, "Cash Flow -- after-tax, by source and account (baseline)")
 
     headers = ["Year", "Age A", "Age B", "Pension", "Passive", "Wages",
-               "Soc Sec", "RMD", "AGI", "Fed tax", "State tax", "IRMAA",
-               "Spend", "Draw: taxable", "Draw: pre-tax", "Draw: Roth",
+               "Soc Sec", "RMD", "Cap gains", "MAGI", "Fed tax", "State tax",
+               "Cap-gains tax", "NIIT", "IRMAA", "ACA subsidy", "Spend",
+               "Draw: taxable", "Draw: pre-tax", "Draw: Roth",
                "Pre-tax bal", "Roth bal", "Taxable bal", "Net worth"]
     ws.append(headers)
     _header_row(ws, headers)
@@ -213,13 +214,16 @@ def build_cash_flow(wb, cfg):
     for r in run["ledger"]:
         ws.append([r["year"], r["a_age"], r["b_age"], round(r["pension"]),
                    round(r["passive"]), round(r["wages"]), round(r["ss_total"]),
-                   round(r["rmd"]), round(r["agi"]), round(r["fed_tax"]),
-                   round(r["state_tax"]), round(r["irmaa"]), round(r["spend"]),
-                   round(r["draw_taxable"]), round(r["draw_trad"]), round(r["draw_roth"]),
-                   round(r["trad"]), round(r["roth"]), round(r["taxable"]),
-                   round(r["net_worth"])])
+                   round(r["rmd"]), round(r.get("cap_gains", 0)), round(r["magi"]),
+                   round(r["fed_tax"]), round(r["state_tax"]), round(r.get("cg_tax", 0)),
+                   round(r.get("niit", 0)), round(r["irmaa"]), round(r.get("aca_subsidy", 0)),
+                   round(r["spend"]), round(r["draw_taxable"]), round(r["draw_trad"]),
+                   round(r["draw_roth"]), round(r["trad"]), round(r["roth"]),
+                   round(r["taxable"]), round(r["net_worth"])])
+        if r.get("aca_subsidy", 0) > 0:
+            ws.cell(row=ws.max_row, column=16).font = GOODF
         if r["irmaa"] > 0:
-            ws.cell(row=ws.max_row, column=12).font = RED
+            ws.cell(row=ws.max_row, column=15).font = RED
 
     for col in range(1, len(headers) + 1):
         ws.column_dimensions[get_column_letter(col)].width = 12
@@ -264,13 +268,16 @@ def _simulate_conversions(cfg, strategy, target=None):
 
 def _optimize_conversions(cfg):
     """Grid-search the level real conversion target (today's $ AGI ceiling) that
-    minimizes total lifetime tax, subject to the plan staying solvent."""
+    minimizes NET lifetime cost -- taxes (incl. terminal heir tax + IRMAA) minus
+    the ACA premium subsidy preserved -- subject to the plan staying solvent.
+    Using net cost (not tax alone) keeps the optimizer from over-converting in
+    the pre-65 window and forfeiting ACA premium tax credits."""
     best = None
     for t in range(0, 400001, 5000):
         r = _simulate_conversions(cfg, "optimal", target=float(t))
         if r["insolvent"]:
             continue
-        if best is None or r["total_tax"] < best["total_tax"]:
+        if best is None or r["net_cost"] < best["net_cost"]:
             best = r
     if best is None:  # nothing solvent -- fall back to the do-nothing baseline
         best = _simulate_conversions(cfg, "none")
@@ -285,11 +292,14 @@ def build_roth_ladder(wb, cfg):
     Lifetime tax = in-life federal + state + IRMAA (present-valued) PLUS the
     terminal tax heirs pay on the pre-tax balance under the SECURE 10-year rule.
 
-    Tax engine: engine/tax_us.py (federal MFJ brackets + IRMAA cascade + a hybrid
-    flat/optional-progressive state layer). Models ordinary income, the standard
-    deduction, RMDs (Uniform Lifetime Table), the IRMAA 2-year lookback, and the
-    terminal heir tax. Does NOT model NIIT, capital-gains rates, per-state
-    retirement exclusions, or spousal IRA splitting. Illustrative, not advice.
+    Tax engine: engine/tax_us.py. Models ordinary income (federal MFJ brackets +
+    standard deduction + hybrid state), the IRMAA 2-year lookback, Social
+    Security taxation via provisional income (IRC sec. 86), long-term capital
+    gains realized on taxable draws (0/15/20% stacked) + NIIT, the terminal heir
+    tax, and the ACA premium tax credit in the pre-65 window. The optimizer
+    minimizes NET cost (tax minus ACA subsidy), so it won't over-convert and
+    forfeit subsidies. Does NOT model per-state retirement exclusions, AMT, QBI,
+    or spousal IRA splitting. Illustrative, not advice. See docs/US_RULES.md.
     """
     ws = wb.create_sheet("Roth Conversion Ladder")
     _title(ws, "Roth Conversion Ladder -- lifetime-tax optimizer")
@@ -298,35 +308,36 @@ def build_roth_ladder(wb, cfg):
     heur = _simulate_conversions(cfg, "bracket")
     best = _optimize_conversions(cfg)
 
-    ws.append(["Objective: minimize lifetime tax = PV(federal + state + IRMAA) "
-               "+ terminal tax heirs pay on the pre-tax balance left at age 90."])
+    ws.append(["Objective: minimize NET lifetime cost = PV(federal + state + IRMAA "
+               "+ capital gains + NIIT) + terminal heir tax MINUS the ACA premium "
+               "subsidy preserved in the pre-65 window."])
     ws.append([])
 
     # ---- strategy comparison ----
     cmp_headers = ["Strategy", "Annual target (AGI)", "In-life tax (PV)",
-                   "Terminal heir tax (PV)", "TOTAL lifetime tax (PV)",
-                   "Pre-tax left @90", "Roth @90", "Estate @90"]
+                   "Terminal heir tax (PV)", "ACA subsidy kept (PV)",
+                   "NET lifetime cost (PV)", "Pre-tax left @90", "Roth @90"]
     ws.append(cmp_headers)
     _header_row(ws, cmp_headers)
     rows = [
         ("Do nothing (RMDs only)", "n/a", none),
         ("Fill to top of 22% bracket", "22% bracket / IRMAA cap", heur),
-        ("Lifetime-tax optimal",
+        ("Net-cost optimal",
          (f"${best['target']:,.0f}/yr" if best.get("target") else "n/a"), best),
     ]
-    base_total = none["total_tax"]
+    base_net = none["net_cost"]
     for label, tgt, r in rows:
         ws.append([label, tgt, round(r["lifetime_tax"]), round(r["terminal_tax"]),
-                   round(r["total_tax"]), round(r["trad_end"]), round(r["roth_end"]),
-                   round(r["estate_end"])])
+                   round(r["lifetime_aca_subsidy"]), round(r["net_cost"]),
+                   round(r["trad_end"]), round(r["roth_end"])])
         if r is best:
             for c in range(1, len(cmp_headers) + 1):
                 ws.cell(row=ws.max_row, column=c).font = GOODF
     ws.append([])
-    saved = base_total - best["total_tax"]
-    pct = (100 * saved / base_total) if base_total else 0.0
-    ws.append(["Lifetime tax saved vs. do-nothing", round(saved),
-               f"{pct:.0f}% lower total tax at a ${best['target']:,.0f}/yr conversion ceiling"
+    saved = base_net - best["net_cost"]
+    pct = (100 * saved / base_net) if base_net else 0.0
+    ws.append(["Net cost saved vs. do-nothing", round(saved),
+               f"{pct:.0f}% lower net cost at a ${best['target']:,.0f}/yr conversion ceiling"
                if best.get("target") else "optimizer fell back to do-nothing"])
     ws.cell(row=ws.max_row, column=1).font = BOLD
     ws.cell(row=ws.max_row, column=2).font = GOODF
@@ -334,19 +345,19 @@ def build_roth_ladder(wb, cfg):
 
     # ---- optimal year-by-year schedule ----
     sch_headers = ["Year", "Age A", "Age B", "Base income", "RMD", "Conversion",
-                   "AGI", "Income tax", "IRMAA", "MAGI (lookback)",
+                   "MAGI", "Income tax", "Cap-gains tax", "IRMAA", "ACA subsidy",
                    "Pre-tax bal", "Roth bal"]
     ws.append(sch_headers)
     _header_row(ws, sch_headers)
     for r in best["schedule"]:
         ws.append([r["year"], r["a_age"], r["b_age"], round(r["base_ordinary"]),
                    round(r["forced"]), round(r["conversion"]), round(r["agi"]),
-                   round(r["tax"]), round(r["irmaa"]), round(r["magi_look"]),
-                   round(r["trad"]), round(r["roth"])])
+                   round(r["tax"]), round(r.get("cg_tax", 0)), round(r["irmaa"]),
+                   round(r.get("aca", 0)), round(r["trad"]), round(r["roth"])])
         if r["irmaa"] > 0:
-            ws.cell(row=ws.max_row, column=9).font = RED
+            ws.cell(row=ws.max_row, column=10).font = RED
 
-    widths = [8, 7, 7, 13, 12, 13, 13, 12, 10, 16, 14, 14]
+    widths = [8, 7, 7, 13, 12, 13, 13, 12, 13, 10, 12, 14, 14]
     for i, w in enumerate(widths, start=1):
         ws.column_dimensions[get_column_letter(i)].width = w
     return ws
