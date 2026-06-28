@@ -1,4 +1,5 @@
 """Unit tests for the shared simulation kernel (engine/simulate.py)."""
+import copy
 import pathlib
 
 import pytest
@@ -113,3 +114,54 @@ def test_pool_helpers_partition_the_accounts():
     pools = sim.pretax_total(cfg) + sim.roth_total(cfg) + sim.taxable_total(cfg)
     hsa = cfg["accounts"].get("hsa", 0)
     assert pools == pytest.approx(inv - hsa)
+
+
+# ---- spending model: smile + lumpy expenses (Phase 2a) -------------------
+SMILE = {"phases": [{"until_age": 75, "multiplier": 1.0},
+                    {"until_age": 85, "multiplier": 0.85},
+                    {"until_age": 999, "multiplier": 0.95}]}
+
+
+def test_spending_multiplier_flat_without_config():
+    assert sim.spending_multiplier({}, 70) == 1.0
+
+
+def test_spending_multiplier_follows_phases():
+    cfg = {"spending": SMILE}
+    assert sim.spending_multiplier(cfg, 70) == 1.0      # go-go
+    assert sim.spending_multiplier(cfg, 80) == 0.85     # slow-go
+    assert sim.spending_multiplier(cfg, 90) == 0.95     # no-go
+
+
+def test_lumpy_expense_hits_the_right_year_inflation_adjusted():
+    cfg = {"spending": {"lumpy": [{"year": 2034, "amount": 40000}]}}
+    assert sim.lumpy_expense(cfg, 2033, 1.1) == 0.0
+    assert sim.lumpy_expense(cfg, 2034, 1.0) == pytest.approx(40000)
+    assert sim.lumpy_expense(cfg, 2034, 1.2) == pytest.approx(48000)   # inflated
+
+
+def test_smile_lowers_midretirement_spend_in_ledger():
+    flat = _cfg()
+    smiled = copy.deepcopy(flat)
+    smiled["spending"] = SMILE
+    fr = {r["a_age"]: r["spend"] for r in sim.simulate(flat)["ledger"]}
+    sr = {r["a_age"]: r["spend"] for r in sim.simulate(smiled)["ledger"]}
+    assert sr[80] < fr[80]                       # slow-go years spend less
+    assert sr[70] == pytest.approx(fr[70])       # go-go unchanged
+
+
+def test_lumpy_expense_spikes_one_year_of_spend():
+    base = _cfg()
+    lumped = copy.deepcopy(base)
+    lumped["spending"] = {"lumpy": [{"year": 2034, "amount": 50000}]}
+    b = {r["year"]: r["spend"] for r in sim.simulate(base)["ledger"]}
+    L = {r["year"]: r["spend"] for r in sim.simulate(lumped)["ledger"]}
+    assert L[2034] > b[2034]                      # spike in the lumpy year
+    assert L[2035] == pytest.approx(b[2035])      # neighbours unchanged
+
+
+def test_no_spending_block_preserves_baseline():
+    # Backward compatibility: absent spending block == flat (snapshot intact).
+    assert "spending" not in _cfg()
+    r = sim.simulate(_cfg(), strategy="none")
+    assert r["total_tax"] == pytest.approx(3747670.76, abs=1.0)
