@@ -29,6 +29,7 @@ of hardcoding values. When you add a value, put it in `Assumptions` and link to 
 | Employer Concentration | Employer-stock exposure vs. watch/trim thresholds |
 | Year-by-Year Projections | Spend, income floor, portfolio draw, EOY balance to age ~90 |
 | Monte Carlo | 3-scenario success rates (populated by quarterly_update.py) |
+| Roth Conversion Ladder | Lifetime-tax optimizer (`engine/tax_us.py`) — do-nothing vs. fill-to-bracket heuristic vs. optimal target, with a year-by-year schedule |
 | Action Plan | Open items and recurring checks |
 
 ## Cell color convention

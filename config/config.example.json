@@ -2,6 +2,7 @@
   "_comment": "Copy this file to config/config.json and fill in YOUR numbers. config.json is git-ignored so your real data never gets committed. Every downstream script reads from here -- this is the single source of truth for identity, accounts, and assumptions. See docs/ARCHITECTURE.md.",
 
   "household": {
+    "_comment": "state_income_tax_rate + local_income_tax_rate are your flat effective rates (set 0 for no-income-tax states). For a progressive state you may OPTIONALLY add a state_brackets array, e.g. \"state_brackets\": [[0.02, 50000], [0.05, 100000], [0.07, null]] -- it replaces the flat state rate. Fold any state retirement break (SS/pension exclusion) into your rate. See docs/US_RULES.md.",
     "name": "Your Household",
     "members": [
       { "id": "spouse_a", "display_name": "Person A", "birth_year": 1975, "retirement_age": 57, "ss_claim_age": 67 },
