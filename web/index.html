@@ -192,7 +192,25 @@ function buildConfig(){
   };
 }
 
+let lastPlan = null;
+
+function downloadPlan(){
+  if(!lastPlan) return;
+  const text = "YOUR RETIREMENT PLAN — IN PLAIN ENGLISH\n" + "=".repeat(42) + "\n\n" + lastPlan.narrative + "\n";
+  const a = document.createElement("a");
+  a.href = URL.createObjectURL(new Blob([text], {type:"text/plain"}));
+  a.download = "my-retirement-plan.txt";
+  document.body.appendChild(a); a.click(); a.remove();
+  URL.revokeObjectURL(a.href);
+}
+function changeAnswers(){
+  document.getElementById("result").classList.add("hidden");
+  document.getElementById("form").classList.remove("hidden");
+  window.scrollTo(0,0);
+}
+
 function renderPlan(plan){
+  lastPlan = plan;
   const cls = {green:"good",yellow:"warn",red:"bad"}[plan.color] || "good";
   const spend = "$" + Math.round(plan.monthly_spend).toLocaleString();
   const li = a => a.map(x => `<li>${esc(x)}</li>`).join("");
@@ -209,7 +227,11 @@ function renderPlan(plan){
       <ol>${li(plan.actions)}</ol>
       <h2 style="color:var(--ink);margin-top:18px">A few things to watch</h2>
       <ol>${li(plan.watch)}</ol>
-      <p style="margin-top:16px"><button class="link" onclick="document.getElementById('result').classList.add('hidden');document.getElementById('form').classList.remove('hidden');window.scrollTo(0,0);">&larr; Change my answers</button></p>
+      <div style="margin-top:18px;display:flex;gap:10px;flex-wrap:wrap">
+        <button type="button" class="go" style="width:auto;padding:11px 18px;font-size:15px" onclick="downloadPlan()">⬇ Download my plan</button>
+        <button type="button" class="go" style="width:auto;padding:11px 18px;font-size:15px;background:#fff;color:var(--navy);border:1px solid var(--line)" onclick="window.print()">🖨 Print</button>
+        <button type="button" class="link" style="margin-left:auto" onclick="changeAnswers()">&larr; Change my answers</button>
+      </div>
     </div>
     <p class="muted">A guide to help you plan — not formal financial advice. Your real numbers may differ.</p>`;
   el.classList.remove("hidden");
@@ -227,7 +249,7 @@ document.getElementById("form").addEventListener("submit", e => {
     const planJson = pyodide.runPython(`
 import json, plain_language
 _p = plain_language.plan_summary(json.loads(cfg_json))
-json.dumps({k:_p[k] for k in ("headline","color","retire_age","monthly_spend","actions","watch")})
+json.dumps({k:_p[k] for k in ("headline","color","retire_age","monthly_spend","actions","watch","narrative")})
 `);
     renderPlan(JSON.parse(planJson));
   } catch(err){

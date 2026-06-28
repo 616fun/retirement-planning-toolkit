@@ -27,8 +27,12 @@ in-browser load fast and dependency-free. `tests/test_web_ready.py` guards that.
   with sensible defaults and an *Advanced* section. It builds a full engine
   config behind the scenes and shows the personalized plan. Pyodide warms up in
   the background while you fill the form, so "See my plan" feels instant.
-- **I3 (next):** result page polish, a "download my plan" button, and a
-  GitHub Pages deploy so it has a real public URL.
+- **I3 (done):** a "Download my plan" button (saves the plain-English plan as a
+  text file) + Print, and a GitHub Pages deploy. The repo root redirects to the
+  app and `.nojekyll` serves the engine files as-is, so the planner is reachable
+  at a public URL.
+- **I4 (next):** put it in front of a few real people; let their reactions order
+  the remaining capability work.
 
 ## Run it locally
 
