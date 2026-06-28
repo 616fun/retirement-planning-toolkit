@@ -95,13 +95,16 @@ def _money(x):
 def plan_summary(cfg):
     """Build the plain-English plan as a structured dict (so the dashboard, a
     text file, and tests can all use it) plus a ready-to-read `narrative`."""
+    none = simulate.simulate(cfg, strategy="none")
+    best = simulate.optimize_conversions(cfg)
+    return _build_plan(cfg, none, best)
+
+
+def _build_plan(cfg, none, best):
     members = cfg["household"]["members"]
     name_a = members[0].get("display_name", "you")
     retire_age = members[0]["retirement_age"]
     monthly_spend = cfg["assumptions"]["retirement_spend_annual"] / 12.0
-
-    none = simulate.simulate(cfg, strategy="none")
-    best = simulate.optimize_conversions(cfg)
 
     # Verdict: does the plan last to age 90 at the planned spending?
     if not none["insolvent"]:
@@ -159,6 +162,58 @@ def _render_narrative(name, verdict, retire_age, monthly_spend, actions, watch):
     lines += ["", "This is a guide to help you plan, not formal financial advice. "
               "Your real numbers may differ."]
     return "\n".join(lines)
+
+
+def _strategy_row(r):
+    """Headline figures for one drawdown strategy (do-nothing or optimal)."""
+    return {
+        "target": r.get("target"),
+        "lifetime_tax": r["lifetime_tax"], "terminal_tax": r["terminal_tax"],
+        "aca_kept": r["lifetime_aca_subsidy"], "net_cost": r["net_cost"],
+        "pretax_end": r["trad_end"], "roth_end": r["roth_end"],
+        "money_lasts": not r["insolvent"],
+    }
+
+
+def full_report(cfg):
+    """Everything the interface needs to show its work -- the plain plan PLUS
+    the numbers behind it: do-nothing vs. the recommended plan, the year-by-year
+    cash flow, and the assumptions used. All JSON-serializable so it can be
+    rendered in the browser. This is the 'trust but verify' layer."""
+    none = simulate.simulate(cfg, strategy="none")
+    best = simulate.optimize_conversions(cfg)
+    plan = _build_plan(cfg, none, best)
+
+    # Year-by-year cash flow of the RECOMMENDED plan (the trajectory we advise).
+    series = [{
+        "year": r["year"], "age": r["a_age"], "phase": r["phase"],
+        "income": r["pension"] + r["passive"] + r["ss_total"] + r["wages"],
+        "conversion": r.get("conversion", 0.0), "spend": r["spend"],
+        "tax": r["total_tax"], "pretax": r["trad"], "roth": r["roth"],
+        "taxable": r["taxable"], "net_worth": r["net_worth"],
+    } for r in best["ledger"]]
+
+    a = cfg["assumptions"]
+    hh = cfg["household"]
+    assumptions = {
+        "return_pct": round(a["portfolio_return_base"] * 100, 1),
+        "inflation_pct": round(a["inflation_rate"] * 100, 1),
+        "state_tax_pct": round(hh.get("state_income_tax_rate", 0) * 100, 2),
+        "retire_age": hh["members"][0]["retirement_age"],
+        "ss_claim_age": hh["members"][0]["ss_claim_age"],
+        "planned_to_age": 90,
+        "monthly_spend": a["retirement_spend_annual"] / 12.0,
+    }
+    return {
+        "plan": plan,
+        "comparison": {
+            "do_nothing": _strategy_row(none),
+            "recommended": _strategy_row(best),
+            "lifetime_saved": max(0.0, none["net_cost"] - best["net_cost"]),
+        },
+        "series": series,
+        "assumptions": assumptions,
+    }
 
 
 def plain_text(cfg):

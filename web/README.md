@@ -31,6 +31,11 @@ in-browser load fast and dependency-free. `tests/test_web_ready.py` guards that.
   text file) + Print, and a GitHub Pages deploy. The repo root redirects to the
   app and `.nojekyll` serves the engine files as-is, so the planner is reachable
   at a public URL.
+- **Evidence layer (done):** the result is no longer "trust me." Under the
+  plain verdict it now shows the work — **doing-nothing vs. this plan** (the
+  lifetime-tax difference), a **chart of your savings over time** (so you can see
+  it lasts), a collapsible **year-by-year table** (every dollar, every year), and
+  **the assumptions used**. Powered by `plain_language.full_report()`.
 - **I4 (next):** put it in front of a few real people; let their reactions order
   the remaining capability work.
 
