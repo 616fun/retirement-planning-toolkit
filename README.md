@@ -41,6 +41,7 @@ replace.
 |---|---|---|
 | Config loader | `engine/config_loader.py` | One load point + derived math (concentration, investable total) |
 | Model builder | `engine/build_model.py` | Generates the multi-tab `.xlsx` from config |
+| Tax engine | `engine/tax_us.py` | Federal MFJ brackets + IRMAA cascade + hybrid state tax; powers the Roth-conversion ladder optimizer |
 | Company health | `engine/company_health.py` | Live ticker price/analyst/insider data → RSU/trim verdict |
 | Quarterly update | `engine/quarterly_update.py` | Rebuild + 10k-path Monte Carlo + dashboard refresh |
 | Dashboard | `engine/refresh_dashboard.py` | Self-contained HTML with KPIs, concentration, MC |
