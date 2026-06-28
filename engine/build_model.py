@@ -432,6 +432,14 @@ def main():
     print(f"  -> {out}")
     print(f"  Tabs: {wb.sheetnames}")
 
+    # Plain-English plan -- the human-readable summary, written next to the model
+    # and echoed to the console (the part a non-expert actually reads).
+    import plain_language
+    summary = plain_language.plain_text(cfg)
+    (out.parent / "plan_summary.txt").write_text(summary, encoding="utf-8")
+    print(f"  Plain-English plan -> {out.parent / 'plan_summary.txt'}\n")
+    print(summary)
+
 
 if __name__ == "__main__":
     main()

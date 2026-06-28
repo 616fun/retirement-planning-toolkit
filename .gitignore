@@ -11,6 +11,7 @@ config/config.json
 # Generated / personal data artifacts
 model/*.xlsx
 model/*.xls
+model/plan_summary.txt
 dashboard/dashboard.html
 dashboard/*.bak
 market_intelligence.json
