@@ -43,3 +43,10 @@ def test_web_page_and_its_engine_files_exist():
     for f in WEB_ENGINE_FILES:
         assert (ROOT / "engine" / f).exists(), f"web references missing engine/{f}"
         assert f in html, f"web/index.html no longer lists engine/{f}"
+
+
+def test_pages_deploy_scaffolding():
+    # Root redirect sends Pages visitors to the app; .nojekyll serves files as-is.
+    root = ROOT / "index.html"
+    assert root.exists() and "web/" in root.read_text()
+    assert (ROOT / ".nojekyll").exists()
