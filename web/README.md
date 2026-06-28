@@ -21,10 +21,14 @@ in-browser load fast and dependency-free. `tests/test_web_ready.py` guards that.
 ## Status
 
 - **I1 (done):** proof of concept — the engine runs in-browser and renders the
-  plain-English plan from a **demo** config.
-- **I2 (next):** a friendly "tell us about your money" intake wizard that builds
-  the config from a person's own answers (plain questions, sensible defaults).
-- **I3 (next):** result page polish + GitHub Pages deploy.
+  plain-English plan.
+- **I2 (done):** a friendly "tell us about your money" intake wizard — plain
+  questions (ages, savings buckets, income, spending, pre-65 health insurance)
+  with sensible defaults and an *Advanced* section. It builds a full engine
+  config behind the scenes and shows the personalized plan. Pyodide warms up in
+  the background while you fill the form, so "See my plan" feels instant.
+- **I3 (next):** result page polish, a "download my plan" button, and a
+  GitHub Pages deploy so it has a real public URL.
 
 ## Run it locally
 
