@@ -220,6 +220,10 @@ function downloadReport(){
   t += `If you do nothing (only required withdrawals): about ${money0(c.do_nothing.net_cost)} in lifetime taxes.\n`;
   t += `With this plan: about ${money0(c.recommended.net_cost)} in lifetime taxes.\n`;
   t += `You save about ${money0(c.lifetime_saved)} over your life.\n\n`;
+  const mc = lastReport.monte_carlo;
+  t += "HOW IT HOLDS UP IN BAD MARKETS\n" + "-".repeat(42) + "\n";
+  t += `Across ${mc.n_sims} random market futures, your money lasted to age ${a.planned_to_age} about ${mc.success_rate}% of the time.\n`;
+  t += `Worst 1-in-10 markets: about ${money0(mc.end_low)} left at ${a.planned_to_age}. Typical: about ${money0(mc.end_median)}.\n\n`;
   t += "WHAT THIS IS BASED ON\n" + "-".repeat(42) + "\n";
   t += `Investment return ${a.return_pct}%/yr · inflation ${a.inflation_pct}%/yr · state tax ${a.state_tax_pct}% · retire at ${a.retire_age} · planned through age ${a.planned_to_age}.\n`;
   const blob = new Blob([t], {type:"text/plain"});
@@ -240,6 +244,8 @@ function renderReport(report){
   const spend = money0(plan.monthly_spend);
   const li = arr => arr.map(x => `<li>${esc(x)}</li>`).join("");
   const lasts = c.recommended.money_lasts;
+  const mc = report.monte_carlo;
+  const mcCls = {green:"good",yellow:"warn",red:"bad"}[mc.color] || "good";
 
   // year-by-year table rows (retired years carry the interesting numbers)
   const rows = report.series.filter(r => r.phase === "retired").map(r => `
@@ -274,8 +280,21 @@ function renderReport(report){
     </div>
 
     <div class="card">
+      <h2 style="color:var(--ink)">Will your money last if markets go bad?</h2>
+      <p class="muted" style="margin-top:-4px">We ran your plan through ${mc.n_sims.toLocaleString()} different market futures — booms and busts.</p>
+      <div style="display:flex;align-items:baseline;gap:14px;margin:6px 0 4px">
+        <div class="${mcCls}" style="font-size:42px;font-weight:800;line-height:1">${mc.success_rate}%</div>
+        <div style="font-weight:600">${esc(mc.message)}</div>
+      </div>
+      <div class="bar" style="height:12px;background:#eef0f3;border-radius:6px;overflow:hidden">
+        <div style="height:100%;width:${mc.success_rate}%;background:var(--${mcCls})"></div>
+      </div>
+      <p class="muted" style="margin-top:8px">Even in a rough market (worst 1 in 10), you'd have about <b>${money0(mc.end_low)}</b> left at age ${a.planned_to_age}; in a typical one, about <b>${money0(mc.end_median)}</b>.</p>
+    </div>
+
+    <div class="card">
       <h2 style="color:var(--ink)">Your savings over time</h2>
-      <p class="muted" style="margin-top:-4px">${lasts ? "Your savings are projected to last through age "+a.planned_to_age+"." : "Heads up: your savings run low before age "+a.planned_to_age+"."}</p>
+      <p class="muted" style="margin-top:-4px">${lasts ? "In the expected case, your savings are projected to last through age "+a.planned_to_age+"." : "Heads up: in the expected case your savings run low before age "+a.planned_to_age+"."}</p>
       <canvas id="nwChart" height="200"></canvas>
     </div>
 

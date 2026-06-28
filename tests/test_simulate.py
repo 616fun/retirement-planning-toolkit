@@ -106,6 +106,44 @@ def test_callable_return_path_is_accepted():
     assert len(r["ledger"]) > 0
 
 
+# ---- Monte Carlo (pure-stdlib; runs in the browser) ----------------------
+def test_monte_carlo_shape_and_determinism():
+    cfg = _cfg()
+    m1 = sim.monte_carlo(cfg, n_sims=200, strategy="optimal", target=170000.0)
+    m2 = sim.monte_carlo(cfg, n_sims=200, strategy="optimal", target=170000.0)
+    assert 0.0 <= m1["success_rate"] <= 100.0
+    assert m1["success_rate"] == m2["success_rate"]          # fixed seed -> reproducible
+    assert m1["end_low"] <= m1["end_median"] <= m1["end_high"]
+
+
+def test_monte_carlo_uses_no_numpy():
+    # MC must stay pure-Python so it runs in the browser (Pyodide) deps-free.
+    import subprocess, sys
+    code = ("import sys; sys.path.insert(0,'engine'); import json, simulate; "
+            "cfg=json.load(open('config/examples/rivera_config.json')); "
+            "simulate.monte_carlo(cfg, n_sims=50); "
+            "assert 'numpy' not in sys.modules, 'numpy leaked into MC'")
+    subprocess.run([sys.executable, "-c", code], check=True, cwd=ROOT)
+
+
+def test_record_false_skips_ledger_but_keeps_summary():
+    cfg = _cfg()
+    full = sim.simulate(cfg, strategy="none")
+    light = sim.simulate(cfg, strategy="none", record=False)
+    assert light["ledger"] == [] and light["schedule"] == []
+    assert light["net_cost"] == pytest.approx(full["net_cost"])   # summary unchanged
+    assert light["trad_end"] == pytest.approx(full["trad_end"])
+
+
+def test_worse_returns_lower_success():
+    # A household on the edge: higher volatility / lower return -> lower success.
+    cfg = _cfg()
+    cfg["assumptions"]["retirement_spend_annual"] = 180000   # stress it
+    hi = sim.monte_carlo(cfg, n_sims=300, strategy="none", sigma=0.08)
+    lo = sim.monte_carlo(cfg, n_sims=300, strategy="none", sigma=0.20)
+    assert lo["success_rate"] <= hi["success_rate"]
+
+
 # ---- pool helpers --------------------------------------------------------
 def test_pool_helpers_partition_the_accounts():
     cfg = _cfg()

@@ -96,6 +96,13 @@ def test_full_report_exposes_the_evidence():
         assert k in r["assumptions"]
 
 
+def test_full_report_includes_monte_carlo():
+    mc = pl.full_report(_cfg())["monte_carlo"]
+    assert 0.0 <= mc["success_rate"] <= 100.0
+    assert mc["color"] in ("green", "yellow", "red")
+    assert mc["message"] and mc["n_sims"] > 0
+
+
 def test_full_report_reflects_inputs():
     # A higher assumed return shows up in the echoed assumptions (transparency).
     base = _cfg()

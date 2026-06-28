@@ -36,6 +36,11 @@ in-browser load fast and dependency-free. `tests/test_web_ready.py` guards that.
   lifetime-tax difference), a **chart of your savings over time** (so you can see
   it lasts), a collapsible **year-by-year table** (every dollar, every year), and
   **the assumptions used**. Powered by `plain_language.full_report()`.
+- **Monte Carlo (done, free):** "Will your money last if markets go bad?" — the
+  plan is run through 500 random market futures and reports the **chance it lasts
+  to 90** plus the worst-1-in-10 and typical ending balances. Pure-stdlib
+  `simulate.monte_carlo()` (no numpy), so it runs in the browser in well under a
+  second.
 - **I4 (next):** put it in front of a few real people; let their reactions order
   the remaining capability work.
 
