@@ -1,0 +1,118 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Your Retirement Plan — in plain English</title>
+<!--
+  PROOF OF CONCEPT (interface MVP step I1).
+  Proves the existing Python engine runs entirely IN THE BROWSER via Pyodide:
+  no server, no install, and the numbers never leave the device. This page
+  loads engine/*.py unchanged and calls plain_language.plan_summary() on a
+  demo config. The friendly intake wizard that builds the config from a
+  person's own answers is the next step (I2); for now it uses the demo data.
+-->
+<style>
+  :root { --good:#1a7f37; --warn:#bf8700; --bad:#cf222e; --ink:#1f2933; --line:#e5e7eb; }
+  body { font-family:-apple-system,Segoe UI,Roboto,sans-serif; color:var(--ink);
+         margin:0; background:#f7f8fa; }
+  header { background:#1f3864; color:#fff; padding:22px 28px; }
+  header h1 { margin:0; font-size:20px; }
+  header .sub { opacity:.85; font-size:13px; margin-top:4px; }
+  .wrap { max-width:760px; margin:0 auto; padding:24px 20px; }
+  .card { background:#fff; border:1px solid var(--line); border-radius:12px;
+          padding:22px; margin-bottom:16px; }
+  .verdict { font-size:24px; font-weight:800; margin:0 0 6px; }
+  .good { color:var(--good); } .warn { color:var(--warn); } .bad { color:var(--bad); }
+  .lead { border-left:6px solid var(--line); }
+  .lead.good { border-color:var(--good); } .lead.warn { border-color:var(--warn); }
+  .lead.bad { border-color:var(--bad); }
+  h2 { font-size:16px; margin:18px 0 8px; }
+  ol { padding-left:20px; } li { margin:8px 0; line-height:1.5; }
+  .muted { color:#6b7280; font-size:13px; }
+  .status { text-align:center; padding:40px 10px; color:#6b7280; }
+  .spinner { width:26px; height:26px; border:3px solid var(--line);
+             border-top-color:#1f3864; border-radius:50%; margin:0 auto 14px;
+             animation:spin 1s linear infinite; }
+  @keyframes spin { to { transform:rotate(360deg); } }
+  .pill { display:inline-block; background:#eef2ff; color:#3730a3; border-radius:999px;
+          padding:2px 10px; font-size:12px; font-weight:600; }
+  code { background:#f0f1f3; padding:1px 5px; border-radius:4px; }
+</style>
+</head>
+<body>
+<header>
+  <h1>Your Retirement Plan — in plain English</h1>
+  <div class="sub">Runs entirely on your device. Your numbers never leave this page.</div>
+</header>
+
+<div class="wrap">
+  <div id="app">
+    <div class="status">
+      <div class="spinner"></div>
+      <div id="statusText">Warming up the planner… (first load downloads the engine, ~10&nbsp;sec)</div>
+    </div>
+  </div>
+  <p class="muted">Proof of concept using sample data. A guided “tell us about your money”
+     form comes next. Educational only — not financial advice.</p>
+</div>
+
+<script src="https://cdn.jsdelivr.net/pyodide/v0.26.2/full/pyodide.js"></script>
+<script>
+const ENGINE_FILES = ["config_loader.py", "tax_us.py", "simulate.py", "plain_language.py"];
+const DEMO_CONFIG = "../config/examples/rivera_config.json";
+
+function setStatus(msg) { const el = document.getElementById("statusText"); if (el) el.textContent = msg; }
+
+function esc(s) { const d = document.createElement("div"); d.textContent = s; return d.innerHTML; }
+
+function render(plan) {
+  const cls = { green: "good", yellow: "warn", red: "bad" }[plan.color] || "good";
+  const spend = "$" + Math.round(plan.monthly_spend).toLocaleString();
+  const li = arr => arr.map(x => `<li>${esc(x)}</li>`).join("");
+  document.getElementById("app").innerHTML = `
+    <div class="card lead ${cls}">
+      <p class="verdict ${cls}">${esc(plan.headline)}</p>
+      <p>The plan has you stop working at age <b>${plan.retire_age}</b>. It is built to
+         cover about <b>${spend}/month</b> and to keep up as prices rise.</p>
+      <span class="pill">computed in your browser ✓</span>
+    </div>
+    <div class="card">
+      <h2>The moves that help most</h2>
+      <ol>${li(plan.actions)}</ol>
+      <h2>A few things to watch</h2>
+      <ol>${li(plan.watch)}</ol>
+    </div>`;
+}
+
+async function main() {
+  try {
+    const pyodide = await loadPyodide();
+    setStatus("Loading the planning engine…");
+    pyodide.FS.mkdirTree("/engine");
+    for (const f of ENGINE_FILES) {
+      const src = await (await fetch("../engine/" + f)).text();
+      pyodide.FS.writeFile("/engine/" + f, src);
+    }
+    pyodide.runPython("import sys; sys.path.insert(0, '/engine')");
+
+    setStatus("Building your plan…");
+    const cfg = await (await fetch(DEMO_CONFIG)).json();
+    pyodide.globals.set("cfg_json", JSON.stringify(cfg));
+    const planJson = pyodide.runPython(`
+import json, plain_language
+_p = plain_language.plan_summary(json.loads(cfg_json))
+json.dumps({k: _p[k] for k in ("headline","color","retire_age","monthly_spend","actions","watch")})
+`);
+    render(JSON.parse(planJson));
+  } catch (err) {
+    document.getElementById("app").innerHTML =
+      `<div class="card"><p class="verdict bad">Something went wrong loading the planner.</p>
+       <p class="muted">${esc(String(err))}</p></div>`;
+    console.error(err);
+  }
+}
+main();
+</script>
+</body>
+</html>

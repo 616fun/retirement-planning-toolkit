@@ -347,6 +347,37 @@ def simulate(cfg, *, returns=None, strategy="none", target=None, horizon=None):
     }
 
 
+# ---- Roth-conversion optimizer (engine core; no spreadsheet dependency) ----
+
+def simulate_conversions(cfg, strategy, target=None):
+    """Run the deterministic (base-return) projection under a conversion policy.
+
+      "none"    -- RMDs only (do-nothing baseline)
+      "bracket" -- fill to the top of the 22% bracket, IRMAA-capped in the
+                   Medicare lookback window (the readable heuristic)
+      "optimal" -- fill ordinary income to a level real `target` (today's $)
+    """
+    return simulate(cfg, strategy=strategy, target=target)
+
+
+def optimize_conversions(cfg):
+    """Grid-search the level real conversion target (today's $ AGI ceiling) that
+    minimizes NET lifetime cost -- taxes (incl. terminal heir tax + IRMAA) minus
+    the ACA premium subsidy preserved -- subject to the plan staying solvent.
+    Using net cost (not tax alone) keeps the optimizer from over-converting in
+    the pre-65 window and forfeiting ACA premium tax credits."""
+    best = None
+    for t in range(0, 400001, 5000):
+        r = simulate(cfg, strategy="optimal", target=float(t))
+        if r["insolvent"]:
+            continue
+        if best is None or r["net_cost"] < best["net_cost"]:
+            best = r
+    if best is None:  # nothing solvent -- fall back to the do-nothing baseline
+        best = simulate(cfg, strategy="none")
+    return best
+
+
 def _working_row(year, a_age, b_age, trad, roth, taxable, re_total):
     """A minimal pre-retirement ledger row (pools growing, no spend/tax)."""
     return {
