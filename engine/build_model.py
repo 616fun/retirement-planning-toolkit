@@ -33,6 +33,8 @@ import tax_us  # noqa: E402
 import simulate  # noqa: E402
 from simulate import (  # noqa: E402  (re-exported for back-compat with callers/tests)
     rmd_factor, rmd_start_age, pretax_total, roth_total, taxable_total,
+    simulate_conversions as _simulate_conversions,
+    optimize_conversions as _optimize_conversions,
 )
 
 from openpyxl import Workbook
@@ -248,40 +250,6 @@ def build_monte_carlo(wb, cfg):
 # ---- Roth-conversion ladder optimizer -------------------------------------
 # The year-by-year simulation now lives in engine/simulate.py (the shared
 # kernel). rmd_factor / rmd_start_age / pool helpers are re-exported above.
-
-
-def _simulate_conversions(cfg, strategy, target=None):
-    """Thin wrapper over the shared kernel for the Roth-ladder optimizer.
-
-    Runs the deterministic (base-return) projection under a conversion policy and
-    returns the kernel result -- which carries the present-valued lifetime tax,
-    terminal heir tax, ending balances, solvency, and the retirement-year
-    `schedule` the Roth tab renders. See engine/simulate.py and docs/US_RULES.md.
-
-      "none"    -- RMDs only (do-nothing baseline)
-      "bracket" -- fill to the top of the 22% bracket, IRMAA-capped in the
-                   Medicare lookback window (the readable heuristic)
-      "optimal" -- fill ordinary income to a level real `target` (today's $)
-    """
-    return simulate.simulate(cfg, strategy=strategy, target=target)
-
-
-def _optimize_conversions(cfg):
-    """Grid-search the level real conversion target (today's $ AGI ceiling) that
-    minimizes NET lifetime cost -- taxes (incl. terminal heir tax + IRMAA) minus
-    the ACA premium subsidy preserved -- subject to the plan staying solvent.
-    Using net cost (not tax alone) keeps the optimizer from over-converting in
-    the pre-65 window and forfeiting ACA premium tax credits."""
-    best = None
-    for t in range(0, 400001, 5000):
-        r = _simulate_conversions(cfg, "optimal", target=float(t))
-        if r["insolvent"]:
-            continue
-        if best is None or r["net_cost"] < best["net_cost"]:
-            best = r
-    if best is None:  # nothing solvent -- fall back to the do-nothing baseline
-        best = _simulate_conversions(cfg, "none")
-    return best
 
 
 def build_roth_ladder(wb, cfg):

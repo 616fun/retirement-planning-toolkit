@@ -42,6 +42,7 @@ replace.
 | Config loader | `engine/config_loader.py` | One load point + derived math (concentration, investable total) |
 | Simulation kernel | `engine/simulate.py` | The one year-by-year projection — ledger + summary — that the Year-by-Year, Cash Flow, and Roth-optimizer tabs all read from |
 | Plain-English plan | `engine/plain_language.py` | Turns the engine's output into an 8th-grade-readable summary (verdict + what to do + what to watch); written to `plan_summary.txt` and shown atop the dashboard. See [docs/PLAIN_LANGUAGE.md](docs/PLAIN_LANGUAGE.md) |
+| Web app (in progress) | `web/index.html` | Runs the engine **in the browser** (Pyodide) so a non-technical person gets their plain plan from a URL — data stays on their device. See [web/README.md](web/README.md) |
 | Model builder | `engine/build_model.py` | Generates the multi-tab `.xlsx` from config |
 | Tax engine | `engine/tax_us.py` | Federal MFJ brackets, IRMAA, hybrid state, Social Security provisional-income taxation, capital gains + NIIT, and the ACA premium tax credit; powers the net-cost Roth-conversion optimizer |
 | Company health | `engine/company_health.py` | Live ticker price/analyst/insider data → RSU/trim verdict |

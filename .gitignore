@@ -48,3 +48,6 @@ venv/
 # OS
 .DS_Store
 .~lock.*#
+
+# Local preview config
+.claude/

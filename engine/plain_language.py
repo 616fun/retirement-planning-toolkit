@@ -95,14 +95,13 @@ def _money(x):
 def plan_summary(cfg):
     """Build the plain-English plan as a structured dict (so the dashboard, a
     text file, and tests can all use it) plus a ready-to-read `narrative`."""
-    import build_model  # local import avoids a circular dependency at module load
     members = cfg["household"]["members"]
     name_a = members[0].get("display_name", "you")
     retire_age = members[0]["retirement_age"]
     monthly_spend = cfg["assumptions"]["retirement_spend_annual"] / 12.0
 
     none = simulate.simulate(cfg, strategy="none")
-    best = build_model._optimize_conversions(cfg)
+    best = simulate.optimize_conversions(cfg)
 
     # Verdict: does the plan last to age 90 at the planned spending?
     if not none["insolvent"]:
