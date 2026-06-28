@@ -27,6 +27,7 @@ Tax engine: engine/tax_us.py. See docs/US_RULES.md for the modelling scope.
 """
 
 import datetime
+import random
 import sys
 from pathlib import Path
 
@@ -132,10 +133,14 @@ def _return_at(returns, n, default):
     return float(returns[n] if n < len(returns) else returns[-1])
 
 
-def simulate(cfg, *, returns=None, strategy="none", target=None, horizon=None):
+def simulate(cfg, *, returns=None, strategy="none", target=None, horizon=None,
+             record=True):
     """Run the household projection and return {ledger, schedule, summary...}.
 
     returns   -- nominal return path (see _return_at); None = config base rate.
+    record    -- when False, skip building the per-year ledger/schedule rows
+                 (the summary fields are still computed). Monte Carlo passes
+                 False so thousands of runs stay fast.
     strategy  -- conversion policy: "none" (RMDs only), "bracket" (fill to top of
                  the 22% bracket, IRMAA-capped in the Medicare window), or
                  "optimal" (fill ordinary income to a level real `target`).
@@ -231,7 +236,8 @@ def simulate(cfg, *, returns=None, strategy="none", target=None, horizon=None):
             # Still working -- pools grow; no draws, conversions, or retirement
             # tax modelled. A minimal ledger row preserves the accumulation
             # runway for the projection tabs.
-            ledger.append(_working_row(year, a_age, b_age, trad, roth, taxable, re_total))
+            if record:
+                ledger.append(_working_row(year, a_age, b_age, trad, roth, taxable, re_total))
             continue
 
         idx = (1 + infl) ** n
@@ -307,28 +313,29 @@ def simulate(cfg, *, returns=None, strategy="none", target=None, horizon=None):
                                      year, infl, enhanced=aca_enhanced)
         lifetime_aca += aca / ((1 + infl) ** n)
 
-        # Backward-compatible schedule row (exact keys the Roth tab reads) + extras.
-        schedule.append({
-            "year": year, "a_age": a_age, "b_age": b_age,
-            "base_ordinary": non_ss + ss_taxable, "forced": forced, "conversion": conversion,
-            "agi": magi, "tax": fed + st, "irmaa": irmaa, "magi_look": magi_look,
-            "cg_tax": cg_tax, "niit": niit_tax, "aca": aca,
-            "trad": trad, "roth": roth,
-            "over": irmaa > 0,
-        })
-        # Rich ledger row (income, taxes, draws, balances) for the projection tabs.
-        ledger.append({
-            "year": year, "a_age": a_age, "b_age": b_age, "phase": "retired",
-            "pension": pension, "passive": passive, "wages": b_work,
-            "ss_total": ss_total, "ss_taxable": ss_taxable, "rmd": forced,
-            "conversion": conversion, "agi": ordinary_agi, "magi": magi,
-            "cap_gains": realized_gain, "fed_tax": fed, "state_tax": st,
-            "cg_tax": cg_tax, "niit": niit_tax, "irmaa": irmaa, "aca_subsidy": aca,
-            "total_tax": year_tax, "spend": spend,
-            "draw_taxable": draw_taxable, "draw_trad": draw_trad, "draw_roth": draw_roth,
-            "trad": trad, "roth": roth, "taxable": taxable,
-            "portfolio": trad + roth + taxable, "net_worth": trad + roth + taxable + re_total,
-        })
+        if record:
+            # Backward-compatible schedule row (exact keys the Roth tab reads) + extras.
+            schedule.append({
+                "year": year, "a_age": a_age, "b_age": b_age,
+                "base_ordinary": non_ss + ss_taxable, "forced": forced, "conversion": conversion,
+                "agi": magi, "tax": fed + st, "irmaa": irmaa, "magi_look": magi_look,
+                "cg_tax": cg_tax, "niit": niit_tax, "aca": aca,
+                "trad": trad, "roth": roth,
+                "over": irmaa > 0,
+            })
+            # Rich ledger row (income, taxes, draws, balances) for the projection tabs.
+            ledger.append({
+                "year": year, "a_age": a_age, "b_age": b_age, "phase": "retired",
+                "pension": pension, "passive": passive, "wages": b_work,
+                "ss_total": ss_total, "ss_taxable": ss_taxable, "rmd": forced,
+                "conversion": conversion, "agi": ordinary_agi, "magi": magi,
+                "cap_gains": realized_gain, "fed_tax": fed, "state_tax": st,
+                "cg_tax": cg_tax, "niit": niit_tax, "irmaa": irmaa, "aca_subsidy": aca,
+                "total_tax": year_tax, "spend": spend,
+                "draw_taxable": draw_taxable, "draw_trad": draw_trad, "draw_roth": draw_roth,
+                "trad": trad, "roth": roth, "taxable": taxable,
+                "portfolio": trad + roth + taxable, "net_worth": trad + roth + taxable + re_total,
+            })
 
     # ---- terminal tax: pre-tax balance left to heirs (SECURE 10-year rule) ----
     terminal_tax = (trad * tax_us.HEIR_MARGINAL_RATE) / ((1 + infl) ** horizon)
@@ -376,6 +383,40 @@ def optimize_conversions(cfg):
     if best is None:  # nothing solvent -- fall back to the do-nothing baseline
         best = simulate(cfg, strategy="none")
     return best
+
+
+def monte_carlo(cfg, *, n_sims=500, strategy="none", target=None, sigma=0.12, seed=12345):
+    """Run the plan through `n_sims` random market futures and report how often
+    the money lasts to the horizon. Each year's return is drawn from a normal
+    distribution around the assumed base return (std dev `sigma`). Uses the
+    stdlib `random` only -- no numpy -- so it runs in the browser. Deterministic
+    for a given seed, so results are reproducible.
+
+    Returns success_rate (% of futures where the plan stays solvent to age 90)
+    plus the 10th / 50th / 90th percentile ending estate."""
+    a = cfg["assumptions"]
+    mu = a["portfolio_return_base"]
+    rng = random.Random(seed)
+    horizon = max(1, 90 - current_age(cfg, "spouse_a"))
+    successes, ends = 0, []
+    for _ in range(n_sims):
+        path = [rng.gauss(mu, sigma) for _ in range(horizon + 1)]
+        r = simulate(cfg, returns=path, strategy=strategy, target=target, record=False)
+        if not r["insolvent"]:
+            successes += 1
+        ends.append(r["estate_end"])
+    ends.sort()
+
+    def pctile(p):
+        if not ends:
+            return 0.0
+        return ends[min(len(ends) - 1, int(p / 100.0 * len(ends)))]
+
+    return {
+        "n_sims": n_sims,
+        "success_rate": round(100.0 * successes / n_sims, 1),
+        "end_low": pctile(10), "end_median": pctile(50), "end_high": pctile(90),
+    }
 
 
 def _working_row(year, a_age, b_age, trad, roth, taxable, re_total):

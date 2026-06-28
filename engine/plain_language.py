@@ -204,6 +204,19 @@ def full_report(cfg):
         "planned_to_age": 90,
         "monthly_spend": a["retirement_spend_annual"] / 12.0,
     }
+
+    # Monte Carlo: run the RECOMMENDED plan through hundreds of random markets.
+    mc_strategy = "optimal" if best.get("target") is not None else "none"
+    mc = simulate.monte_carlo(cfg, n_sims=500, strategy=mc_strategy,
+                              target=best.get("target"))
+    if mc["success_rate"] >= 85:
+        mc_color, mc_msg = "green", "Your plan holds up well, even in rough markets."
+    elif mc["success_rate"] >= 70:
+        mc_color, mc_msg = "yellow", "Your plan usually works, but a bad market could strain it."
+    else:
+        mc_color, mc_msg = "red", "In many market futures the money runs short -- worth tightening."
+    mc["color"], mc["message"] = mc_color, mc_msg
+
     return {
         "plan": plan,
         "comparison": {
@@ -213,6 +226,7 @@ def full_report(cfg):
         },
         "series": series,
         "assumptions": assumptions,
+        "monte_carlo": mc,
     }
 
 
