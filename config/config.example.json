@@ -72,6 +72,18 @@
     "aca_benchmark_premium_annual": 0
   },
 
+  "spending": {
+    "_comment": "Optional. 'phases' apply a real-spending multiplier by spouse-A age (the retirement smile: go-go / slow-go / no-go); each entry applies up to until_age (exclusive). 'lumpy' are one-time expenses in today's $ for a given year. Omit the whole block for flat inflation-adjusted spending.",
+    "phases": [
+      { "until_age": 75, "multiplier": 1.0 },
+      { "until_age": 85, "multiplier": 0.85 },
+      { "until_age": 999, "multiplier": 0.95 }
+    ],
+    "lumpy": [
+      { "year": 2034, "amount": 40000, "label": "replace vehicle" }
+    ]
+  },
+
   "assumptions": {
     "_comment": "taxable_unrealized_gain_pct = embedded-gain share of the taxable pool (drives capital gains on draws); override per-account with accounts.taxable_cost_basis. aca_enhanced_subsidies=false models the current-law 400% FPL cliff returning post-2025; set true for the ARPA/IRA 8.5% cap with no cliff.",
     "portfolio_return_base": 0.075,

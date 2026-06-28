@@ -93,6 +93,32 @@ def real_estate_total(cfg):
                      if isinstance(v, (int, float))))
 
 
+# ---- spending model: the retirement "smile" + lumpy one-time expenses ------
+
+def spending_multiplier(cfg, age):
+    """Real-spending multiplier at `age` from cfg["spending"]["phases"] -- the
+    retirement smile (e.g. go-go 1.0 to ~75, slow-go 0.85 to ~85, no-go 0.95 as
+    healthcare rises). Each phase applies up to its `until_age` (exclusive);
+    absent config => 1.0 (flat spending, the prior behavior)."""
+    phases = cfg.get("spending", {}).get("phases")
+    if not phases:
+        return 1.0
+    for ph in phases:
+        if age < ph.get("until_age", 999):
+            return float(ph.get("multiplier", 1.0))
+    return float(phases[-1].get("multiplier", 1.0))
+
+
+def lumpy_expense(cfg, year, idx):
+    """One-time expenses scheduled for `year` from cfg["spending"]["lumpy"].
+    Amounts are in today's dollars and inflated to the year by `idx`."""
+    total = 0.0
+    for item in cfg.get("spending", {}).get("lumpy", []):
+        if item.get("year") == year:
+            total += float(item.get("amount", 0)) * idx
+    return total
+
+
 def _return_at(returns, n, default):
     """Resolve the nominal return for year index n from `returns`, which may be
     None (use the config base rate), a constant float, a callable(n)->rate, or a
@@ -210,7 +236,9 @@ def simulate(cfg, *, returns=None, strategy="none", target=None, horizon=None):
 
         idx = (1 + infl) ** n
         std = std0 * idx
-        spend = spend0 * idx
+        # Spending = inflation-adjusted base x the retirement-smile multiplier,
+        # plus any lumpy one-time expenses scheduled for the year.
+        spend = spend0 * idx * spending_multiplier(cfg, a_age) + lumpy_expense(cfg, year, idx)
         pension = pension_m * 12 * ((1 + cola) ** max(0, a_age - a_ret))
         passive = passive0 * idx
         b_work = b_salary0 * idx if b_age < b_ret else 0.0

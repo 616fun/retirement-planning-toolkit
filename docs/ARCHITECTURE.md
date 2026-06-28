@@ -27,6 +27,10 @@ tab, the Cash Flow tab, and the Roth optimizer are all thin callers — so they
 can never drift apart. (The Monte Carlo still uses its own vectorized path; it
 migrates onto the kernel in a later phase.)
 
+Spending feeds the kernel through an optional `spending` config block: age-keyed
+**phase multipliers** (the retirement "smile" — go-go / slow-go / no-go) and
+**lumpy** one-time expenses. Omit the block for flat inflation-adjusted spending.
+
 ## Single source of truth
 `config/config.json` holds identity, accounts, employer stock, income, Social
 Security, and assumptions. Inside the **spreadsheet**, the `Assumptions` tab plays
