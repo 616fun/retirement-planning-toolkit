@@ -12,7 +12,8 @@ import quarterly_update as qu
 ROOT = pathlib.Path(__file__).resolve().parent.parent
 EXPECTED_SHEETS = {
     "Assumptions", "Net Worth Snapshot", "Employer Concentration", "Income Streams",
-    "Year-by-Year Projections", "Monte Carlo", "Roth Conversion Ladder", "Action Plan",
+    "Year-by-Year Projections", "Cash Flow", "Monte Carlo", "Roth Conversion Ladder",
+    "Action Plan",
 }
 DEMO = "rivera_config.json"
 

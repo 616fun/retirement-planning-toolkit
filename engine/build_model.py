@@ -10,8 +10,11 @@ Mirrors the architecture documented in docs/ARCHITECTURE.md:
       black text  = intra-sheet formula
       blue text   = hardcoded input
   * Tabs built here: Assumptions, Net Worth Snapshot, Income Streams,
-    Year-by-Year Projections, Employer Concentration, Monte Carlo (summary),
-    Roth Conversion Ladder (lifetime-tax optimizer, engine/tax_us.py), Action Plan.
+    Year-by-Year Projections, Cash Flow, Employer Concentration, Monte Carlo
+    (summary), Roth Conversion Ladder (lifetime-tax optimizer), Action Plan.
+  * The year-by-year math lives in engine/simulate.py (the shared kernel) so the
+    Year-by-Year tab, the Cash Flow tab, and the Roth optimizer all read one
+    consistent projection. Tax engine: engine/tax_us.py.
 
 Run:
   python3 engine/build_model.py                      # demo config
@@ -27,6 +30,10 @@ from config_loader import (  # noqa: E402
     current_age,
 )
 import tax_us  # noqa: E402
+import simulate  # noqa: E402
+from simulate import (  # noqa: E402  (re-exported for back-compat with callers/tests)
+    rmd_factor, rmd_start_age, pretax_total, roth_total, taxable_total,
+)
 
 from openpyxl import Workbook
 from openpyxl.styles import Font, PatternFill, Alignment, Border, Side
@@ -159,53 +166,63 @@ def build_concentration(wb, cfg):
 
 
 def build_year_by_year(wb, cfg):
+    """Summary projection: the baseline (RMD-only, no conversions) run from the
+    shared kernel. Now after-tax and pool-aware -- the portfolio draw reflects
+    the real spending need net of guaranteed income and taxes, and the EOY
+    balance is the sum of the pre-tax + Roth + taxable pools (HSA/529 excluded)."""
     ws = wb.create_sheet("Year-by-Year Projections")
-    _title(ws, "Year-by-Year Projections (simplified)")
-    members = cfg["household"]["members"]
-    a = cfg["assumptions"]
-    spend0 = a["retirement_spend_annual"]
-    infl = a["inflation_rate"]
-    ret = a["portfolio_return_base"]
-    pension = cfg["income"]["pension_monthly_at_retirement"] * 12
-    passive = cfg["income"]["passive_income_annual"]
-    ss_a = cfg["social_security"]["spouse_a_monthly_benefit"] * 12
-    ss_b = cfg["social_security"]["spouse_b_monthly_benefit"] * 12
+    _title(ws, "Year-by-Year Projections (after-tax baseline -- RMDs, no conversions)")
 
     headers = ["Year", "Spouse A age", "Spouse B age", "Spend (infl-adj)",
-               "Pension", "Passive", "Social Security", "Portfolio draw", "Portfolio EOY"]
+               "Pension", "Passive", "Social Security", "Tax",
+               "Portfolio draw", "Portfolio EOY"]
     ws.append(headers)
     _header_row(ws, headers)
 
-    import datetime
-    base_year = datetime.date.today().year
-    a_age0 = current_age(cfg, "spouse_a")
-    b_age0 = current_age(cfg, "spouse_b")
-    a_ret_age = members[0]["retirement_age"]
-    a_ss_age = members[0]["ss_claim_age"]
-    b_ss_age = members[1]["ss_claim_age"]
-    portfolio = investable_total(cfg)
-
-    for n in range(0, 36):
-        year = base_year + n
-        a_age = a_age0 + n
-        b_age = b_age0 + n
-        retired = a_age >= a_ret_age
-        spend = spend0 * ((1 + infl) ** n) if retired else 0
-        pen = pension * ((1 + cfg["income"]["pension_cola"]) ** max(0, a_age - a_ret_age)) if retired else 0
-        pas = passive if retired else 0
-        ss = (ss_a if a_age >= a_ss_age else 0) + (ss_b if b_age >= b_ss_age else 0)
-        # grow then draw
-        portfolio *= (1 + ret)
-        draw = 0
-        if retired:
-            need = spend - pen - pas - ss
-            draw = max(0, need)
-            portfolio -= draw
-        ws.append([year, a_age, b_age, round(spend), round(pen), round(pas),
-                   round(ss), round(draw), round(portfolio)])
+    run = simulate.simulate(cfg)            # strategy="none" baseline
+    for r in run["ledger"]:
+        draw = r["draw_taxable"] + r["draw_trad"] + r["draw_roth"]
+        ws.append([r["year"], r["a_age"], r["b_age"], round(r["spend"]),
+                   round(r["pension"]), round(r["passive"]), round(r["ss_total"]),
+                   round(r["total_tax"]), round(draw), round(r["portfolio"])])
+        if r.get("phase") == "retired" and r["draw_roth"] + r["draw_trad"] == 0 \
+                and r["portfolio"] <= 0:
+            ws.cell(row=ws.max_row, column=10).font = RED
 
     for col in range(1, len(headers) + 1):
         ws.column_dimensions[get_column_letter(col)].width = 15
+    return ws
+
+
+def build_cash_flow(wb, cfg):
+    """Detailed after-tax cash-flow ledger -- the fullest view of the kernel's
+    baseline run: every income source, the AGI/MAGI driving the tax cliffs,
+    federal/state/IRMAA tax, which pool funded each shortfall, and the running
+    pre-tax / Roth / taxable balances. Source: engine/simulate.py."""
+    ws = wb.create_sheet("Cash Flow")
+    _title(ws, "Cash Flow -- after-tax, by source and account (baseline)")
+
+    headers = ["Year", "Age A", "Age B", "Pension", "Passive", "Wages",
+               "Soc Sec", "RMD", "AGI", "Fed tax", "State tax", "IRMAA",
+               "Spend", "Draw: taxable", "Draw: pre-tax", "Draw: Roth",
+               "Pre-tax bal", "Roth bal", "Taxable bal", "Net worth"]
+    ws.append(headers)
+    _header_row(ws, headers)
+
+    run = simulate.simulate(cfg)
+    for r in run["ledger"]:
+        ws.append([r["year"], r["a_age"], r["b_age"], round(r["pension"]),
+                   round(r["passive"]), round(r["wages"]), round(r["ss_total"]),
+                   round(r["rmd"]), round(r["agi"]), round(r["fed_tax"]),
+                   round(r["state_tax"]), round(r["irmaa"]), round(r["spend"]),
+                   round(r["draw_taxable"]), round(r["draw_trad"]), round(r["draw_roth"]),
+                   round(r["trad"]), round(r["roth"]), round(r["taxable"]),
+                   round(r["net_worth"])])
+        if r["irmaa"] > 0:
+            ws.cell(row=ws.max_row, column=12).font = RED
+
+    for col in range(1, len(headers) + 1):
+        ws.column_dimensions[get_column_letter(col)].width = 12
     return ws
 
 
@@ -225,176 +242,24 @@ def build_monte_carlo(wb, cfg):
 
 
 # ---- Roth-conversion ladder optimizer -------------------------------------
-
-# IRS Uniform Lifetime Table (2022+) -- required-minimum-distribution divisors.
-# RMD = pre-tax balance / divisor. Ages below the start age have no RMD.
-_RMD_DIVISOR = {
-    73: 26.5, 74: 25.5, 75: 24.6, 76: 23.7, 77: 22.9, 78: 22.0, 79: 21.1,
-    80: 20.2, 81: 19.4, 82: 18.5, 83: 17.7, 84: 16.8, 85: 16.0, 86: 15.2,
-    87: 14.4, 88: 13.7, 89: 12.9, 90: 12.2, 91: 11.5, 92: 10.8, 93: 10.1,
-    94: 9.5, 95: 8.9, 96: 8.4, 97: 7.8, 98: 7.3, 99: 6.8, 100: 6.4,
-}
-
-
-def rmd_start_age(birth_year):
-    """SECURE 2.0 required-beginning-age: 73 (1951-59) or 75 (1960+)."""
-    if birth_year >= 1960:
-        return 75
-    if birth_year >= 1951:
-        return 73
-    return 72
-
-
-def rmd_factor(age):
-    """Fraction of the pre-tax balance that must be withdrawn at `age` (0 before
-    the start age). Clamped to the oldest tabulated divisor."""
-    if age < 73:
-        return 0.0
-    div = _RMD_DIVISOR.get(age, _RMD_DIVISOR[100])
-    return 1.0 / div
+# The year-by-year simulation now lives in engine/simulate.py (the shared
+# kernel). rmd_factor / rmd_start_age / pool helpers are re-exported above.
 
 
 def _simulate_conversions(cfg, strategy, target=None):
-    """Project the household's pre-tax drawdown + Roth-conversion ladder to a
-    planning horizon and return total lifetime tax + a year-by-year schedule.
+    """Thin wrapper over the shared kernel for the Roth-ladder optimizer.
 
-    strategy:
-      "none"    -- take only the forced RMD (the do-nothing baseline)
-      "bracket" -- the readable heuristic: each year convert up to the top of the
-                   22% federal bracket, capped at the IRMAA Tier-1 MAGI line in
-                   any year a spouse is within the 2-year Medicare lookback
-      "optimal" -- fill ordinary income up to a level real `target` (today's $)
+    Runs the deterministic (base-return) projection under a conversion policy and
+    returns the kernel result -- which carries the present-valued lifetime tax,
+    terminal heir tax, ending balances, solvency, and the retirement-year
+    `schedule` the Roth tab renders. See engine/simulate.py and docs/US_RULES.md.
 
-    Lifetime tax = PV of every year's (federal + state + IRMAA) tax, PLUS the
-    terminal tax on the pre-tax balance still standing at the horizon -- which
-    heirs draw down under the SECURE 10-year rule at HEIR_MARGINAL_RATE. Roth
-    dollars pass tax-free, so converting early trades tax paid now (at known
-    bracket rates) against future RMD-driven tax, IRMAA surcharges, and heir
-    tax. PV-discounting at inflation is what produces an interior optimum rather
-    than "convert everything immediately." See docs/US_RULES.md.
+      "none"    -- RMDs only (do-nothing baseline)
+      "bracket" -- fill to the top of the 22% bracket, IRMAA-capped in the
+                   Medicare lookback window (the readable heuristic)
+      "optimal" -- fill ordinary income to a level real `target` (today's $)
     """
-    import datetime
-    a = cfg["assumptions"]
-    m = cfg["household"]["members"]
-    inc, acct = cfg["income"], cfg["accounts"]
-
-    infl, ret = a["inflation_rate"], a["portfolio_return_base"]
-    std0 = a.get("standard_deduction_mfj", tax_us.STANDARD_DEDUCTION_MFJ)
-    spend0 = a["retirement_spend_annual"]
-    base_year = datetime.date.today().year
-
-    a_age0, b_age0 = current_age(cfg, "spouse_a"), current_age(cfg, "spouse_b")
-    a_ret = m[0]["retirement_age"]
-    b_ret = m[1]["retirement_age"]
-    a_ss, b_ss = m[0]["ss_claim_age"], m[1]["ss_claim_age"]
-    a_rmd_start = rmd_start_age(m[0]["birth_year"])
-
-    trad = float(acct.get("spouse_a_401k_pretax", 0) + acct.get("spouse_a_trad_ira", 0)
-                 + acct.get("spouse_b_401k_pretax", 0) + acct.get("spouse_b_trad_ira", 0))
-    roth = float(acct.get("spouse_a_401k_roth", 0) + acct.get("spouse_a_roth_ira", 0)
-                 + acct.get("spouse_b_401k_roth", 0) + acct.get("spouse_b_roth_ira", 0))
-    # Taxable pool funds spending shortfalls and the conversion tax (the lever
-    # that makes conversions powerful -- pay the tax from outside the IRA).
-    taxable = float(acct.get("joint_brokerage", 0) + acct.get("cash_and_cds", 0)
-                    + acct.get("deferred_comp", 0))
-
-    pension_m, cola = inc["pension_monthly_at_retirement"], inc["pension_cola"]
-    passive0 = inc["passive_income_annual"]
-    b_salary0 = inc["spouse_b_annual"]
-    ss_a0 = cfg["social_security"]["spouse_a_monthly_benefit"] * 12
-    ss_b0 = cfg["social_security"]["spouse_b_monthly_benefit"] * 12
-
-    horizon = max(1, 90 - a_age0)            # project to spouse A age 90
-    lifetime_tax, insolvent, schedule = 0.0, False, []
-    magi_history = {}                        # year_index -> AGI, for IRMAA lookback
-
-    for n in range(0, horizon + 1):
-        year = base_year + n
-        a_age, b_age = a_age0 + n, b_age0 + n
-        trad *= (1 + ret); roth *= (1 + ret); taxable *= (1 + ret)
-        if a_age < a_ret:
-            continue  # still working -- no draws or conversions modelled
-
-        idx = (1 + infl) ** n
-        std = std0 * idx
-        spend = spend0 * idx
-        pension = pension_m * 12 * ((1 + cola) ** max(0, a_age - a_ret))
-        passive = passive0 * idx
-        b_work = b_salary0 * idx if b_age < b_ret else 0.0
-        ss_a = ss_a0 * idx if a_age >= a_ss else 0.0
-        ss_b = ss_b0 * idx if b_age >= b_ss else 0.0
-        ss_total = ss_a + ss_b
-        ss_taxable = tax_us.SS_TAXABLE_FRACTION * ss_total
-
-        forced = min(trad * rmd_factor(a_age) if a_age >= a_rmd_start else 0.0, trad)
-        base_ordinary = pension + passive + b_work + ss_taxable + forced
-
-        # ---- choose the conversion amount ----
-        irmaa_ceiling = tax_us.irmaa_tier1_magi(year, infl)
-        if strategy == "none":
-            conversion = 0.0
-        elif strategy == "bracket":
-            # Top of the 22% bracket expressed as AGI (taxable + std deduction).
-            bracket_top_taxable = tax_us.FEDERAL_BRACKETS_MFJ[2][1] * idx
-            ceiling_agi = bracket_top_taxable + std
-            # If either spouse is within 2 years of Medicare, respect IRMAA Tier 1.
-            if (a_age >= tax_us.MEDICARE_AGE - tax_us.IRMAA_LOOKBACK_YEARS
-                    or b_age >= tax_us.MEDICARE_AGE - tax_us.IRMAA_LOOKBACK_YEARS):
-                ceiling_agi = min(ceiling_agi, irmaa_ceiling)
-            conversion = max(0.0, min(ceiling_agi - base_ordinary, trad - forced))
-        else:  # optimal -- fill to a level real target (today's $ AGI)
-            ceiling_agi = target * idx
-            conversion = max(0.0, min(ceiling_agi - base_ordinary, trad - forced))
-
-        trad -= conversion
-        roth += conversion
-        agi = base_ordinary + conversion
-
-        # ---- tax: IRMAA keys off MAGI from two years prior, once on Medicare ----
-        n_medicare = (1 if a_age >= tax_us.MEDICARE_AGE else 0) + \
-                     (1 if b_age >= tax_us.MEDICARE_AGE else 0)
-        magi_look = magi_history.get(n - tax_us.IRMAA_LOOKBACK_YEARS, agi)
-        magi_history[n] = agi
-        fed = tax_us.federal_tax(agi, year, infl, std0)
-        st = tax_us.state_tax(agi, cfg, year, infl, ss_income=ss_taxable)
-        irmaa = tax_us.irmaa_annual(magi_look, year, infl, n_enrolled=n_medicare)
-        year_tax = fed + st + irmaa
-        lifetime_tax += year_tax / ((1 + infl) ** n)   # present value, today's $
-
-        # ---- fund spending; conversion tax is embedded in year_tax ----
-        income_cash = pension + passive + ss_total + b_work + forced
-        net = income_cash - year_tax
-        if net >= spend:
-            taxable += (net - spend)
-        else:
-            short = spend - net
-            take = min(taxable, short); taxable -= take; short -= take
-            if short > 0:
-                take = min(trad, short); trad -= take; short -= take
-            if short > 0:
-                take = min(roth, short); roth -= take; short -= take
-            if short > 1.0:
-                insolvent = True
-
-        schedule.append({
-            "year": year, "a_age": a_age, "b_age": b_age,
-            "base_ordinary": base_ordinary, "forced": forced, "conversion": conversion,
-            "agi": agi, "tax": fed + st, "irmaa": irmaa, "magi_look": magi_look,
-            "trad": trad, "roth": roth,
-            "over": irmaa > 0,
-        })
-
-    # ---- terminal tax: pre-tax balance left to heirs (SECURE 10-year rule) ----
-    terminal_raw = trad * tax_us.HEIR_MARGINAL_RATE
-    terminal_tax = terminal_raw / ((1 + infl) ** horizon)   # present value, today's $
-    total_tax = lifetime_tax + terminal_tax
-    estate = trad + roth + taxable
-    return {
-        "strategy": strategy, "target": target,
-        "lifetime_tax": lifetime_tax, "terminal_tax": terminal_tax, "total_tax": total_tax,
-        "trad_end": trad, "roth_end": roth, "estate_end": estate,
-        "insolvent": insolvent, "schedule": schedule,
-    }
+    return simulate.simulate(cfg, strategy=strategy, target=target)
 
 
 def _optimize_conversions(cfg):
@@ -515,6 +380,7 @@ def build(cfg):
     build_concentration(wb, cfg)
     build_income_note(wb, cfg)
     build_year_by_year(wb, cfg)
+    build_cash_flow(wb, cfg)
     build_monte_carlo(wb, cfg)
     build_roth_ladder(wb, cfg)
     build_action_plan(wb, cfg)

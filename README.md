@@ -40,6 +40,7 @@ replace.
 | Component | File | Does |
 |---|---|---|
 | Config loader | `engine/config_loader.py` | One load point + derived math (concentration, investable total) |
+| Simulation kernel | `engine/simulate.py` | The one year-by-year projection — ledger + summary — that the Year-by-Year, Cash Flow, and Roth-optimizer tabs all read from |
 | Model builder | `engine/build_model.py` | Generates the multi-tab `.xlsx` from config |
 | Tax engine | `engine/tax_us.py` | Federal MFJ brackets + IRMAA cascade + hybrid state tax; powers the Roth-conversion ladder optimizer |
 | Company health | `engine/company_health.py` | Live ticker price/analyst/insider data → RSU/trim verdict |
