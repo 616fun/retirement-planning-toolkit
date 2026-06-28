@@ -5,114 +5,254 @@
 <meta name="viewport" content="width=device-width, initial-scale=1">
 <title>Your Retirement Plan — in plain English</title>
 <!--
-  PROOF OF CONCEPT (interface MVP step I1).
-  Proves the existing Python engine runs entirely IN THE BROWSER via Pyodide:
-  no server, no install, and the numbers never leave the device. This page
-  loads engine/*.py unchanged and calls plain_language.plan_summary() on a
-  demo config. The friendly intake wizard that builds the config from a
-  person's own answers is the next step (I2); for now it uses the demo data.
+  Interface MVP (step I2): a friendly intake wizard.
+  Plain questions -> a config the engine understands -> the plain-English plan,
+  all computed in the browser (Pyodide). Pyodide warms up in the background
+  while the person fills the form, so the "See my plan" click feels instant.
+  No server; the numbers never leave the device.
 -->
 <style>
-  :root { --good:#1a7f37; --warn:#bf8700; --bad:#cf222e; --ink:#1f2933; --line:#e5e7eb; }
+  :root { --good:#1a7f37; --warn:#bf8700; --bad:#cf222e; --ink:#1f2933;
+          --line:#e5e7eb; --navy:#1f3864; }
+  * { box-sizing:border-box; }
   body { font-family:-apple-system,Segoe UI,Roboto,sans-serif; color:var(--ink);
          margin:0; background:#f7f8fa; }
-  header { background:#1f3864; color:#fff; padding:22px 28px; }
+  header { background:var(--navy); color:#fff; padding:22px 28px; }
   header h1 { margin:0; font-size:20px; }
   header .sub { opacity:.85; font-size:13px; margin-top:4px; }
-  .wrap { max-width:760px; margin:0 auto; padding:24px 20px; }
+  .wrap { max-width:720px; margin:0 auto; padding:24px 18px 60px; }
   .card { background:#fff; border:1px solid var(--line); border-radius:12px;
-          padding:22px; margin-bottom:16px; }
-  .verdict { font-size:24px; font-weight:800; margin:0 0 6px; }
-  .good { color:var(--good); } .warn { color:var(--warn); } .bad { color:var(--bad); }
-  .lead { border-left:6px solid var(--line); }
-  .lead.good { border-color:var(--good); } .lead.warn { border-color:var(--warn); }
-  .lead.bad { border-color:var(--bad); }
-  h2 { font-size:16px; margin:18px 0 8px; }
-  ol { padding-left:20px; } li { margin:8px 0; line-height:1.5; }
+          padding:20px 22px; margin-bottom:16px; }
+  h2 { font-size:15px; text-transform:uppercase; letter-spacing:.04em;
+       color:#6b7280; margin:2px 0 14px; }
+  .row { display:grid; grid-template-columns:1fr 1fr; gap:14px; }
+  @media (max-width:520px){ .row { grid-template-columns:1fr; } }
+  label { display:block; font-size:14px; font-weight:600; margin:0 0 4px; }
+  .hint { font-weight:400; color:#6b7280; font-size:12px; }
+  input[type=number], select { width:100%; padding:9px 10px; font-size:15px;
+       border:1px solid var(--line); border-radius:8px; background:#fff; }
+  .field { margin-bottom:12px; }
+  .seg { display:inline-flex; border:1px solid var(--line); border-radius:8px; overflow:hidden; }
+  .seg button { border:0; background:#fff; padding:8px 16px; font-size:14px; cursor:pointer; }
+  .seg button.on { background:var(--navy); color:#fff; }
+  .check { display:flex; align-items:center; gap:8px; font-weight:600; font-size:14px; }
+  details summary { cursor:pointer; font-weight:600; color:var(--navy); }
+  .go { width:100%; padding:14px; font-size:17px; font-weight:700; color:#fff;
+        background:var(--navy); border:0; border-radius:10px; cursor:pointer; }
+  .go:disabled { background:#9aa6bd; cursor:progress; }
   .muted { color:#6b7280; font-size:13px; }
-  .status { text-align:center; padding:40px 10px; color:#6b7280; }
-  .spinner { width:26px; height:26px; border:3px solid var(--line);
-             border-top-color:#1f3864; border-radius:50%; margin:0 auto 14px;
-             animation:spin 1s linear infinite; }
-  @keyframes spin { to { transform:rotate(360deg); } }
+  .prefix { position:relative; } .prefix span { position:absolute; left:10px; top:9px; color:#6b7280; }
+  .prefix input { padding-left:22px; }
+  /* result */
+  .verdict { font-size:24px; font-weight:800; margin:0 0 6px; }
+  .good { color:var(--good);} .warn{ color:var(--warn);} .bad{ color:var(--bad);}
+  .lead.good{border-left:6px solid var(--good);} .lead.warn{border-left:6px solid var(--warn);}
+  .lead.bad{border-left:6px solid var(--bad);}
+  ol { padding-left:20px; } li { margin:8px 0; line-height:1.5; }
   .pill { display:inline-block; background:#eef2ff; color:#3730a3; border-radius:999px;
           padding:2px 10px; font-size:12px; font-weight:600; }
-  code { background:#f0f1f3; padding:1px 5px; border-radius:4px; }
+  .link { background:none; border:0; color:var(--navy); font-weight:600; cursor:pointer; padding:0; }
+  .hidden { display:none; }
 </style>
 </head>
 <body>
 <header>
   <h1>Your Retirement Plan — in plain English</h1>
-  <div class="sub">Runs entirely on your device. Your numbers never leave this page.</div>
+  <div class="sub">Answer a few questions. Everything runs on your device — your numbers never leave this page.</div>
 </header>
 
 <div class="wrap">
-  <div id="app">
-    <div class="status">
-      <div class="spinner"></div>
-      <div id="statusText">Warming up the planner… (first load downloads the engine, ~10&nbsp;sec)</div>
+  <form id="form">
+    <div class="card">
+      <h2>About you</h2>
+      <div class="field">
+        <label>Who is this plan for?</label>
+        <div class="seg" id="couple">
+          <button type="button" data-v="1" class="on">Me &amp; my spouse</button>
+          <button type="button" data-v="0">Just me</button>
+        </div>
+      </div>
+      <div class="row">
+        <div class="field"><label>Your age</label><input type="number" id="ageA" value="55" min="18" max="90"></div>
+        <div class="field spouseOnly"><label>Spouse's age</label><input type="number" id="ageB" value="55" min="18" max="90"></div>
+      </div>
+      <div class="row">
+        <div class="field"><label>Retire at age</label><input type="number" id="retireAge" value="62" min="50" max="75"></div>
+        <div class="field"><label>Claim Social Security at age <span class="hint">(62–70)</span></label><input type="number" id="ssAgeA" value="67" min="62" max="70"></div>
+      </div>
     </div>
-  </div>
-  <p class="muted">Proof of concept using sample data. A guided “tell us about your money”
-     form comes next. Educational only — not financial advice.</p>
+
+    <div class="card">
+      <h2>Your savings</h2>
+      <div class="field">
+        <label>Pre-tax retirement savings <span class="hint">— 401(k) and traditional IRA totals</span></label>
+        <div class="prefix"><span>$</span><input type="number" id="pretax" value="500000" min="0" step="1000"></div>
+      </div>
+      <div class="field">
+        <label>Roth savings <span class="hint">— Roth 401(k) / Roth IRA (grows tax-free)</span></label>
+        <div class="prefix"><span>$</span><input type="number" id="roth" value="100000" min="0" step="1000"></div>
+      </div>
+      <div class="field">
+        <label>Regular savings / brokerage <span class="hint">— money you've already paid tax on</span></label>
+        <div class="prefix"><span>$</span><input type="number" id="brokerage" value="200000" min="0" step="1000"></div>
+      </div>
+    </div>
+
+    <div class="card">
+      <h2>Your income in retirement</h2>
+      <div class="row">
+        <div class="field"><label>Your Social Security <span class="hint">$/month</span></label><div class="prefix"><span>$</span><input type="number" id="ssA" value="2000" min="0" step="50"></div></div>
+        <div class="field spouseOnly"><label>Spouse's Social Security <span class="hint">$/month</span></label><div class="prefix"><span>$</span><input type="number" id="ssB" value="1500" min="0" step="50"></div></div>
+      </div>
+      <div class="row">
+        <div class="field"><label>Pension, if any <span class="hint">$/month</span></label><div class="prefix"><span>$</span><input type="number" id="pension" value="0" min="0" step="50"></div></div>
+        <div class="field"><label>Other income <span class="hint">rental, part-time — $/year</span></label><div class="prefix"><span>$</span><input type="number" id="otherIncome" value="0" min="0" step="500"></div></div>
+      </div>
+    </div>
+
+    <div class="card">
+      <h2>Your spending</h2>
+      <div class="field">
+        <label>About how much will you spend each month in retirement?</label>
+        <div class="prefix"><span>$</span><input type="number" id="monthlySpend" value="6000" min="0" step="100"></div>
+        <div class="hint">Everything — housing, food, travel, fun. We'll keep up with rising prices for you.</div>
+      </div>
+    </div>
+
+    <div class="card">
+      <h2>Health insurance</h2>
+      <label class="check"><input type="checkbox" id="aca"> I'll need to buy my own health insurance before age 65</label>
+      <div class="hint" style="margin-top:6px">If you retire before Medicare (65), keeping income lower some years can earn a big discount. We'll factor that in.</div>
+    </div>
+
+    <div class="card">
+      <details>
+        <summary>Advanced settings <span class="hint">(optional — good defaults already set)</span></summary>
+        <div class="row" style="margin-top:14px">
+          <div class="field"><label>State income tax rate <span class="hint">% (0 if none)</span></label><input type="number" id="stateRate" value="5" min="0" max="15" step="0.1"></div>
+          <div class="field"><label>Expected investment return <span class="hint">% per year</span></label><input type="number" id="retRate" value="7.5" min="0" max="12" step="0.1"></div>
+        </div>
+      </details>
+    </div>
+
+    <button type="submit" class="go" id="go" disabled>Warming up the planner…</button>
+    <p class="muted" style="text-align:center;margin-top:10px">Runs in your browser · nothing is uploaded · educational only, not financial advice</p>
+  </form>
+
+  <div id="result" class="hidden"></div>
 </div>
 
 <script src="https://cdn.jsdelivr.net/pyodide/v0.26.2/full/pyodide.js"></script>
 <script>
 const ENGINE_FILES = ["config_loader.py", "tax_us.py", "simulate.py", "plain_language.py"];
-const DEMO_CONFIG = "../config/examples/rivera_config.json";
+let pyodide = null, couple = 1;
 
-function setStatus(msg) { const el = document.getElementById("statusText"); if (el) el.textContent = msg; }
+function esc(s){ const d=document.createElement("div"); d.textContent=s; return d.innerHTML; }
+function num(id){ return parseFloat(document.getElementById(id).value) || 0; }
 
-function esc(s) { const d = document.createElement("div"); d.textContent = s; return d.innerHTML; }
+// --- couple / single toggle ---
+document.getElementById("couple").addEventListener("click", e => {
+  const b = e.target.closest("button"); if(!b) return;
+  couple = +b.dataset.v;
+  document.querySelectorAll("#couple button").forEach(x => x.classList.toggle("on", x===b));
+  document.querySelectorAll(".spouseOnly").forEach(x => x.classList.toggle("hidden", !couple));
+});
 
-function render(plan) {
-  const cls = { green: "good", yellow: "warn", red: "bad" }[plan.color] || "good";
+// --- build the engine config from plain answers (defaults for everything else) ---
+function buildConfig(){
+  const yr = new Date().getFullYear();
+  const ageA = num("ageA"), ageB = couple ? num("ageB") : num("ageA");
+  const ret = num("retireAge"), ssA = num("ssAgeA");
+  return {
+    household: { name:"My Household", filing_status:"MFJ", state:"--",
+      state_income_tax_rate: num("stateRate")/100, local_income_tax_rate: 0,
+      members: [
+        { id:"spouse_a", display_name:"You", birth_year: yr-ageA, retirement_age: ret, ss_claim_age: ssA },
+        { id:"spouse_b", display_name: couple?"Spouse":"(none)", birth_year: yr-ageB, retirement_age: ret, ss_claim_age: ssA }
+      ]},
+    employer_stock: { employer_name:"(none)", ticker:"NONE", sec_identity:"", major_holder_flag_name:null,
+      watch_threshold_pct:5, trim_threshold_pct:7,
+      holdings:{ employer_stock_in_401k:0, unvested_rsu_value:0, vested_shares_value:0 }},
+    accounts: { spouse_a_401k_pretax:num("pretax"), spouse_a_401k_roth:0, spouse_a_trad_ira:0,
+      spouse_a_roth_ira:num("roth"), spouse_b_401k_pretax:0, spouse_b_401k_roth:0, spouse_b_trad_ira:0,
+      spouse_b_roth_ira:0, joint_brokerage:num("brokerage"), hsa:0, cash_and_cds:0, deferred_comp:0,
+      college_529_a:0, college_529_b:0 },
+    real_estate: { primary_residence:0, other_property:0 },
+    income: { spouse_a_salary:0, spouse_a_bonus_pct:0, spouse_a_rsu_annual:0, spouse_b_annual:0,
+      pension_monthly_at_retirement:num("pension"), pension_cola:0.02, passive_income_annual:num("otherIncome") },
+    social_security: { spouse_a_monthly_benefit:num("ssA"), spouse_b_monthly_benefit: couple?num("ssB"):0 },
+    healthcare: { aca_household_size: couple?2:1,
+      aca_benchmark_premium_annual: document.getElementById("aca").checked ? 18000 : 0 },
+    assumptions: { portfolio_return_base:num("retRate")/100, portfolio_return_conservative:(num("retRate")-2)/100,
+      portfolio_return_optimistic:(num("retRate")+1.5)/100, inflation_rate:0.02,
+      retirement_spend_annual: num("monthlySpend")*12, target_equity_pct:65, target_bond_pct:35,
+      bridge_target:0, standard_deduction_mfj:32200, irmaa_tier1_magi_mfj:218000,
+      taxable_unrealized_gain_pct:0.5, aca_enhanced_subsidies:false },
+    paths: { model_xlsx:"model/financial_plan.xlsx", dashboard_html:"dashboard/dashboard.html" }
+  };
+}
+
+function renderPlan(plan){
+  const cls = {green:"good",yellow:"warn",red:"bad"}[plan.color] || "good";
   const spend = "$" + Math.round(plan.monthly_spend).toLocaleString();
-  const li = arr => arr.map(x => `<li>${esc(x)}</li>`).join("");
-  document.getElementById("app").innerHTML = `
+  const li = a => a.map(x => `<li>${esc(x)}</li>`).join("");
+  const el = document.getElementById("result");
+  el.innerHTML = `
     <div class="card lead ${cls}">
       <p class="verdict ${cls}">${esc(plan.headline)}</p>
-      <p>The plan has you stop working at age <b>${plan.retire_age}</b>. It is built to
-         cover about <b>${spend}/month</b> and to keep up as prices rise.</p>
+      <p>The plan has you stop working at age <b>${plan.retire_age}</b>. It is built to cover about
+         <b>${spend}/month</b> and to keep up as prices rise.</p>
       <span class="pill">computed in your browser ✓</span>
     </div>
     <div class="card">
-      <h2>The moves that help most</h2>
+      <h2 style="color:var(--ink)">The moves that help most</h2>
       <ol>${li(plan.actions)}</ol>
-      <h2>A few things to watch</h2>
+      <h2 style="color:var(--ink);margin-top:18px">A few things to watch</h2>
       <ol>${li(plan.watch)}</ol>
-    </div>`;
+      <p style="margin-top:16px"><button class="link" onclick="document.getElementById('result').classList.add('hidden');document.getElementById('form').classList.remove('hidden');window.scrollTo(0,0);">&larr; Change my answers</button></p>
+    </div>
+    <p class="muted">A guide to help you plan — not formal financial advice. Your real numbers may differ.</p>`;
+  el.classList.remove("hidden");
+  document.getElementById("form").classList.add("hidden");
+  window.scrollTo(0,0);
 }
 
-async function main() {
+document.getElementById("form").addEventListener("submit", e => {
+  e.preventDefault();
+  if(!pyodide) return;
+  const go = document.getElementById("go");
+  go.disabled = true; go.textContent = "Building your plan…";
   try {
-    const pyodide = await loadPyodide();
-    setStatus("Loading the planning engine…");
-    pyodide.FS.mkdirTree("/engine");
-    for (const f of ENGINE_FILES) {
-      const src = await (await fetch("../engine/" + f)).text();
-      pyodide.FS.writeFile("/engine/" + f, src);
-    }
-    pyodide.runPython("import sys; sys.path.insert(0, '/engine')");
-
-    setStatus("Building your plan…");
-    const cfg = await (await fetch(DEMO_CONFIG)).json();
-    pyodide.globals.set("cfg_json", JSON.stringify(cfg));
+    pyodide.globals.set("cfg_json", JSON.stringify(buildConfig()));
     const planJson = pyodide.runPython(`
 import json, plain_language
 _p = plain_language.plan_summary(json.loads(cfg_json))
-json.dumps({k: _p[k] for k in ("headline","color","retire_age","monthly_spend","actions","watch")})
+json.dumps({k:_p[k] for k in ("headline","color","retire_age","monthly_spend","actions","watch")})
 `);
-    render(JSON.parse(planJson));
-  } catch (err) {
-    document.getElementById("app").innerHTML =
-      `<div class="card"><p class="verdict bad">Something went wrong loading the planner.</p>
-       <p class="muted">${esc(String(err))}</p></div>`;
+    renderPlan(JSON.parse(planJson));
+  } catch(err){
+    alert("Sorry — something went wrong building your plan. Please check your numbers.");
     console.error(err);
   }
-}
-main();
+  go.disabled = false; go.textContent = "See my plan";
+});
+
+// --- warm up Pyodide + the engine in the background while they type ---
+(async () => {
+  try {
+    pyodide = await loadPyodide();
+    pyodide.FS.mkdirTree("/engine");
+    for (const f of ENGINE_FILES){
+      pyodide.FS.writeFile("/engine/"+f, await (await fetch("../engine/"+f)).text());
+    }
+    pyodide.runPython("import sys; sys.path.insert(0,'/engine')");
+    const go = document.getElementById("go");
+    go.disabled = false; go.textContent = "See my plan";
+  } catch(err){
+    document.getElementById("go").textContent = "Couldn't load the planner — refresh to retry";
+    console.error(err);
+  }
+})();
 </script>
 </body>
 </html>
