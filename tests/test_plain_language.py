@@ -78,6 +78,31 @@ def test_struggling_household_is_flagged_not_green():
     assert p["color"] in ("yellow", "red")
 
 
+def test_full_report_exposes_the_evidence():
+    r = pl.full_report(_cfg())
+    # the plain plan is still there...
+    assert r["plan"]["color"] in ("green", "yellow", "red")
+    # ...plus the numbers behind it: do-nothing vs recommended, and the saving
+    c = r["comparison"]
+    assert c["do_nothing"]["net_cost"] >= c["recommended"]["net_cost"]
+    assert c["lifetime_saved"] == pytest.approx(
+        max(0.0, c["do_nothing"]["net_cost"] - c["recommended"]["net_cost"]))
+    # year-by-year series covers the plan and carries real per-year numbers
+    assert len(r["series"]) > 20
+    retired = [row for row in r["series"] if row["phase"] == "retired"]
+    assert retired and all("net_worth" in row and "tax" in row for row in retired)
+    # assumptions are echoed back for transparency
+    for k in ("return_pct", "inflation_pct", "state_tax_pct", "planned_to_age"):
+        assert k in r["assumptions"]
+
+
+def test_full_report_reflects_inputs():
+    # A higher assumed return shows up in the echoed assumptions (transparency).
+    base = _cfg()
+    base["assumptions"]["portfolio_return_base"] = 0.06
+    assert pl.full_report(base)["assumptions"]["return_pct"] == 6.0
+
+
 def test_narrative_avoids_bare_jargon():
     # Scary acronyms, if present, must travel with a plain explanation nearby.
     text = pl.plain_text(_cfg()).lower()

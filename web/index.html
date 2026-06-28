@@ -53,6 +53,22 @@
           padding:2px 10px; font-size:12px; font-weight:600; }
   .link { background:none; border:0; color:var(--navy); font-weight:600; cursor:pointer; padding:0; }
   .hidden { display:none; }
+  /* evidence layer */
+  .compare { display:grid; grid-template-columns:1fr 1fr; gap:12px; margin:6px 0 4px; }
+  .compare .box { border:1px solid var(--line); border-radius:10px; padding:14px; text-align:center; }
+  .compare .box.win { border-color:var(--good); background:#f0fbf3; }
+  .compare .big { font-size:22px; font-weight:800; }
+  .save { text-align:center; font-size:15px; margin:8px 0 0; }
+  .save b { color:var(--good); }
+  table.yb { width:100%; border-collapse:collapse; font-size:12.5px; }
+  table.yb th, table.yb td { padding:5px 7px; border-bottom:1px solid var(--line); text-align:right; white-space:nowrap; }
+  table.yb th:first-child, table.yb td:first-child { text-align:left; }
+  table.yb thead th { position:sticky; top:0; background:#f7f8fa; }
+  .scroll { max-height:340px; overflow:auto; border:1px solid var(--line); border-radius:8px; }
+  details.ev { border:1px solid var(--line); border-radius:10px; padding:12px 14px; margin-bottom:12px; background:#fff; }
+  details.ev summary { font-weight:700; }
+  .kv { display:grid; grid-template-columns:1fr auto; gap:6px 16px; font-size:14px; margin-top:10px; }
+  .kv div:nth-child(even){ font-weight:600; text-align:right; }
 </style>
 </head>
 <body>
@@ -143,6 +159,7 @@
 </div>
 
 <script src="https://cdn.jsdelivr.net/pyodide/v0.26.2/full/pyodide.js"></script>
+<script src="https://cdn.jsdelivr.net/npm/chart.js@4.4.1/dist/chart.umd.min.js"></script>
 <script>
 const ENGINE_FILES = ["config_loader.py", "tax_us.py", "simulate.py", "plain_language.py"];
 let pyodide = null, couple = 1;
@@ -192,16 +209,23 @@ function buildConfig(){
   };
 }
 
-let lastPlan = null;
+let lastReport = null, nwChart = null;
+const money0 = x => "$" + Math.round(x).toLocaleString();
 
-function downloadPlan(){
-  if(!lastPlan) return;
-  const text = "YOUR RETIREMENT PLAN — IN PLAIN ENGLISH\n" + "=".repeat(42) + "\n\n" + lastPlan.narrative + "\n";
-  const a = document.createElement("a");
-  a.href = URL.createObjectURL(new Blob([text], {type:"text/plain"}));
-  a.download = "my-retirement-plan.txt";
-  document.body.appendChild(a); a.click(); a.remove();
-  URL.revokeObjectURL(a.href);
+function downloadReport(){
+  if(!lastReport) return;
+  const c = lastReport.comparison, a = lastReport.assumptions;
+  let t = "YOUR RETIREMENT PLAN — IN PLAIN ENGLISH\n" + "=".repeat(42) + "\n\n" + lastReport.plan.narrative + "\n\n";
+  t += "THE NUMBERS BEHIND IT\n" + "-".repeat(42) + "\n";
+  t += `If you do nothing (only required withdrawals): about ${money0(c.do_nothing.net_cost)} in lifetime taxes.\n`;
+  t += `With this plan: about ${money0(c.recommended.net_cost)} in lifetime taxes.\n`;
+  t += `You save about ${money0(c.lifetime_saved)} over your life.\n\n`;
+  t += "WHAT THIS IS BASED ON\n" + "-".repeat(42) + "\n";
+  t += `Investment return ${a.return_pct}%/yr · inflation ${a.inflation_pct}%/yr · state tax ${a.state_tax_pct}% · retire at ${a.retire_age} · planned through age ${a.planned_to_age}.\n`;
+  const blob = new Blob([t], {type:"text/plain"});
+  const el = document.createElement("a");
+  el.href = URL.createObjectURL(blob); el.download = "my-retirement-plan.txt";
+  document.body.appendChild(el); el.click(); el.remove(); URL.revokeObjectURL(el.href);
 }
 function changeAnswers(){
   document.getElementById("result").classList.add("hidden");
@@ -209,11 +233,20 @@ function changeAnswers(){
   window.scrollTo(0,0);
 }
 
-function renderPlan(plan){
-  lastPlan = plan;
+function renderReport(report){
+  lastReport = report;
+  const plan = report.plan, c = report.comparison, a = report.assumptions;
   const cls = {green:"good",yellow:"warn",red:"bad"}[plan.color] || "good";
-  const spend = "$" + Math.round(plan.monthly_spend).toLocaleString();
-  const li = a => a.map(x => `<li>${esc(x)}</li>`).join("");
+  const spend = money0(plan.monthly_spend);
+  const li = arr => arr.map(x => `<li>${esc(x)}</li>`).join("");
+  const lasts = c.recommended.money_lasts;
+
+  // year-by-year table rows (retired years carry the interesting numbers)
+  const rows = report.series.filter(r => r.phase === "retired").map(r => `
+    <tr><td>${r.age}</td><td>${money0(r.income)}</td><td>${money0(r.conversion)}</td>
+    <td>${money0(r.spend)}</td><td>${money0(r.tax)}</td><td>${money0(r.pretax)}</td>
+    <td>${money0(r.roth)}</td><td>${money0(r.taxable)}</td><td><b>${money0(r.net_worth)}</b></td></tr>`).join("");
+
   const el = document.getElementById("result");
   el.innerHTML = `
     <div class="card lead ${cls}">
@@ -222,21 +255,87 @@ function renderPlan(plan){
          <b>${spend}/month</b> and to keep up as prices rise.</p>
       <span class="pill">computed in your browser ✓</span>
     </div>
+
     <div class="card">
       <h2 style="color:var(--ink)">The moves that help most</h2>
       <ol>${li(plan.actions)}</ol>
       <h2 style="color:var(--ink);margin-top:18px">A few things to watch</h2>
       <ol>${li(plan.watch)}</ol>
-      <div style="margin-top:18px;display:flex;gap:10px;flex-wrap:wrap">
-        <button type="button" class="go" style="width:auto;padding:11px 18px;font-size:15px" onclick="downloadPlan()">⬇ Download my plan</button>
+    </div>
+
+    <div class="card">
+      <h2 style="color:var(--ink)">Doing nothing vs. this plan</h2>
+      <p class="muted" style="margin-top:-4px">Lifetime taxes you'd pay (lower is better). "Doing nothing" means taking only the withdrawals the government forces.</p>
+      <div class="compare">
+        <div class="box"><div class="muted">Do nothing</div><div class="big">${money0(c.do_nothing.net_cost)}</div></div>
+        <div class="box win"><div class="muted">This plan</div><div class="big good">${money0(c.recommended.net_cost)}</div></div>
+      </div>
+      ${c.lifetime_saved > 1000 ? `<p class="save">That's about <b>${money0(c.lifetime_saved)}</b> less in lifetime taxes.</p>` : ""}
+    </div>
+
+    <div class="card">
+      <h2 style="color:var(--ink)">Your savings over time</h2>
+      <p class="muted" style="margin-top:-4px">${lasts ? "Your savings are projected to last through age "+a.planned_to_age+"." : "Heads up: your savings run low before age "+a.planned_to_age+"."}</p>
+      <canvas id="nwChart" height="200"></canvas>
+    </div>
+
+    <details class="ev">
+      <summary>See the year-by-year numbers</summary>
+      <div class="scroll" style="margin-top:10px">
+        <table class="yb"><thead><tr><th>Age</th><th>Income</th><th>Move to Roth</th><th>Spend</th><th>Tax</th><th>Pre-tax</th><th>Roth</th><th>Regular</th><th>Total</th></tr></thead>
+        <tbody>${rows}</tbody></table>
+      </div>
+      <p class="muted" style="margin-top:8px">Every dollar, every year — from your answers, run through the same engine professionals' tools use.</p>
+    </details>
+
+    <details class="ev">
+      <summary>What this is based on</summary>
+      <div class="kv">
+        <div>Investment return assumed</div><div>${a.return_pct}% per year</div>
+        <div>Inflation assumed</div><div>${a.inflation_pct}% per year</div>
+        <div>Your state income tax</div><div>${a.state_tax_pct}%</div>
+        <div>Retire at age</div><div>${a.retire_age}</div>
+        <div>Claim Social Security at</div><div>${a.ss_claim_age}</div>
+        <div>Plan runs through age</div><div>${a.planned_to_age}</div>
+      </div>
+      <p class="muted" style="margin-top:10px">Change any of these in <b>Advanced settings</b> and run it again to see how your plan moves.</p>
+    </details>
+
+    <div class="card">
+      <div style="display:flex;gap:10px;flex-wrap:wrap">
+        <button type="button" class="go" style="width:auto;padding:11px 18px;font-size:15px" onclick="downloadReport()">⬇ Download my plan</button>
         <button type="button" class="go" style="width:auto;padding:11px 18px;font-size:15px;background:#fff;color:var(--navy);border:1px solid var(--line)" onclick="window.print()">🖨 Print</button>
         <button type="button" class="link" style="margin-left:auto" onclick="changeAnswers()">&larr; Change my answers</button>
       </div>
     </div>
     <p class="muted">A guide to help you plan — not formal financial advice. Your real numbers may differ.</p>`;
+
   el.classList.remove("hidden");
   document.getElementById("form").classList.add("hidden");
   window.scrollTo(0,0);
+  drawChart(report.series);
+}
+
+function drawChart(series){
+  if(typeof Chart === "undefined") return;
+  const ctx = document.getElementById("nwChart");
+  if(!ctx) return;
+  if(nwChart) nwChart.destroy();
+  const labels = series.map(r => r.age);
+  const ds = (label, key, color) => ({ label, data: series.map(r => Math.round(r[key])),
+    backgroundColor: color, borderColor: color, fill: true, pointRadius: 0, tension: .25 });
+  nwChart = new Chart(ctx, {
+    type: "line",
+    data: { labels, datasets: [
+      ds("Pre-tax (401k/IRA)", "pretax", "#3b6fb6"),
+      ds("Roth (tax-free)", "roth", "#1a7f37"),
+      ds("Regular savings", "taxable", "#bf8700") ] },
+    options: { responsive:true, interaction:{mode:"index",intersect:false},
+      scales: { x:{title:{display:true,text:"Your age"}},
+        y:{stacked:true, ticks:{callback:v => "$"+(v/1e6).toFixed(1)+"M"}} },
+      plugins:{ legend:{position:"bottom"},
+        tooltip:{callbacks:{label:c => c.dataset.label+": "+money0(c.raw)}} } }
+  });
 }
 
 document.getElementById("form").addEventListener("submit", e => {
@@ -246,12 +345,11 @@ document.getElementById("form").addEventListener("submit", e => {
   go.disabled = true; go.textContent = "Building your plan…";
   try {
     pyodide.globals.set("cfg_json", JSON.stringify(buildConfig()));
-    const planJson = pyodide.runPython(`
+    const reportJson = pyodide.runPython(`
 import json, plain_language
-_p = plain_language.plan_summary(json.loads(cfg_json))
-json.dumps({k:_p[k] for k in ("headline","color","retire_age","monthly_spend","actions","watch","narrative")})
+json.dumps(plain_language.full_report(json.loads(cfg_json)))
 `);
-    renderPlan(JSON.parse(planJson));
+    renderReport(JSON.parse(reportJson));
   } catch(err){
     alert("Sorry — something went wrong building your plan. Please check your numbers.");
     console.error(err);
