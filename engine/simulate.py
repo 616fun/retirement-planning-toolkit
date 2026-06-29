@@ -243,7 +243,7 @@ def simulate(cfg, *, returns=None, strategy="none", target=None, horizon=None,
             if record:
                 ledger.append(_working_row(year, a_age, b_age, trad, roth, taxable, re_total))
             if trace:
-                trace_out.append(trad + roth + taxable + re_total)
+                trace_out.append((trad, roth, taxable))
             continue
 
         idx = (1 + infl) ** n
@@ -343,7 +343,7 @@ def simulate(cfg, *, returns=None, strategy="none", target=None, horizon=None,
                 "portfolio": trad + roth + taxable, "net_worth": trad + roth + taxable + re_total,
             })
         if trace:
-            trace_out.append(trad + roth + taxable + re_total)
+            trace_out.append((trad, roth, taxable))
 
     # ---- terminal tax: pre-tax balance left to heirs (SECURE 10-year rule) ----
     terminal_tax = (trad * tax_us.HEIR_MARGINAL_RATE) / ((1 + infl) ** horizon)
@@ -434,11 +434,22 @@ def monte_carlo(cfg, *, n_sims=500, strategy="none", target=None, mu=None,
         "end_high": pctile(ends, 90),
     }
     if bands and traces:
+        re_total = real_estate_total(cfg)
         band = []
         for n in range(len(traces[0])):
-            col = sorted(t[n] for t in traces)
-            band.append({"age": a_age0 + n, "p10": round(pctile(col, 10)),
-                         "p50": round(pctile(col, 50)), "p90": round(pctile(col, 90))})
+            pre = sorted(t[n][0] for t in traces)
+            rot = sorted(t[n][1] for t in traces)
+            txb = sorted(t[n][2] for t in traces)
+            nw = sorted(t[n][0] + t[n][1] + t[n][2] + re_total for t in traces)
+            pre_m, rot_m, txb_m = pctile(pre, 50), pctile(rot, 50), pctile(txb, 50)
+            # p50 is the SUM of pool medians (= the account-stack total), so the
+            # net-worth center line and the account chart agree exactly; p10/p90
+            # are the net-worth range across futures.
+            band.append({"age": a_age0 + n,
+                         "p10": round(pctile(nw, 10)),
+                         "p50": round(pre_m + rot_m + txb_m + re_total),
+                         "p90": round(pctile(nw, 90)),
+                         "pretax": round(pre_m), "roth": round(rot_m), "taxable": round(txb_m)})
         out["band"] = band
     return out
 

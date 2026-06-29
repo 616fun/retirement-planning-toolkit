@@ -112,6 +112,19 @@ def test_full_report_monte_carlo_three_regimes():
         assert sc[k]["band"] and all(b["p10"] <= b["p50"] <= b["p90"] for b in sc[k]["band"])
 
 
+def test_scenario_series_matches_band_and_carries_flows():
+    sc = pl.full_report(_cfg())["monte_carlo"]["scenarios"]
+    for k in sc:
+        ser, band = sc[k]["series"], sc[k]["band"]
+        assert len(ser) == len(band)
+        for s, b in zip(ser, band):
+            # net-worth chart center == account-table total (internal consistency)
+            assert s["net_worth"] == b["p50"]
+            assert s["pretax"] == b["pretax"] and s["roth"] == b["roth"]
+            for key in ("income", "conversion", "spend", "tax"):
+                assert key in s
+
+
 def test_full_report_reflects_inputs():
     # A higher assumed return shows up in the echoed assumptions (transparency).
     base = _cfg()

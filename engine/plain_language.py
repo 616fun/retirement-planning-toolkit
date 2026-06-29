@@ -178,6 +178,26 @@ def _mc_scenario(cfg, label, mu, strategy, target):
     m["label"] = label
     m["sub"] = f"if returns average about {mu * 100:.1f}% a year"
     m["color"], m["message"] = color, msg
+
+    # Per-year series for the account-type chart + the year-by-year table:
+    # balances are the Monte Carlo medians (so they match the net-worth chart),
+    # the income/conversion/spend/tax flows come from a smooth deterministic run
+    # at this market's average return.
+    det = simulate.simulate(cfg, returns=mu, strategy=strategy, target=target)
+    ledger = det["ledger"]
+    series = []
+    for n, b in enumerate(m["band"]):
+        d = ledger[n] if n < len(ledger) else {}
+        series.append({
+            "age": b["age"], "phase": d.get("phase", "retired"),
+            "income": d.get("pension", 0) + d.get("passive", 0)
+                      + d.get("ss_total", 0) + d.get("wages", 0),
+            "conversion": d.get("conversion", 0), "spend": d.get("spend", 0),
+            "tax": d.get("total_tax", 0),
+            "pretax": b["pretax"], "roth": b["roth"], "taxable": b["taxable"],
+            "net_worth": b["p50"],
+        })
+    m["series"] = series
     return m
 
 

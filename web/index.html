@@ -215,7 +215,7 @@ function buildConfig(){
   };
 }
 
-let lastReport = null, nwChart = null;
+let lastReport = null, nwChartObj = null, acctChartObj = null;
 const money0 = x => "$" + Math.round(x).toLocaleString();
 
 function downloadReport(){
@@ -263,11 +263,16 @@ function renderMc(key){
 }
 function mcSelect(key){
   const s = lastReport.monte_carlo.scenarios[key];
+  const market = esc(s.label.toLowerCase());
   document.querySelectorAll("#mcToggle button").forEach(b => b.classList.toggle("on", b.dataset.s === key));
   renderMc(key);
-  drawChart(s.band);                       // the chart follows the chosen market
-  const cap = document.getElementById("chartCaption");
-  if(cap) cap.innerHTML = `In a <b>${esc(s.label.toLowerCase())}</b> (${esc(s.sub)}), the dark line is your most likely savings; the shaded band is the range from a bad to a lucky run.`;
+  drawNetWorth(s.band);                     // net-worth fan: median + range
+  drawAccounts(s.series);                   // account-type composition
+  renderTable(s.series);                    // year-by-year numbers
+  const nw = document.getElementById("nwCaption");
+  if(nw) nw.innerHTML = `In a <b>${market}</b> (${esc(s.sub)}): the dark line is your most likely total; the shaded band is the range from a bad to a lucky run of markets.`;
+  const ac = document.getElementById("acctCaption");
+  if(ac) ac.innerHTML = `How your money typically sits across account types in a <b>${market}</b> — watch pre-tax shrink and Roth grow as you convert.`;
 }
 
 function renderReport(report){
@@ -277,13 +282,6 @@ function renderReport(report){
   const spend = money0(plan.monthly_spend);
   const li = arr => arr.map(x => `<li>${esc(x)}</li>`).join("");
   const mc = report.monte_carlo;
-
-  // year-by-year table rows (retired years carry the interesting numbers)
-  const rows = report.series.filter(r => r.phase === "retired").map(r => `
-    <tr><td>${r.age}</td><td>${money0(r.income)}</td><td>${money0(r.conversion)}</td>
-    <td>${money0(r.spend)}</td><td>${money0(r.tax)}</td><td>${money0(r.pretax)}</td>
-    <td>${money0(r.roth)}</td><td>${money0(r.taxable)}</td><td><b>${money0(r.net_worth)}</b></td></tr>`).join("");
-
   const el = document.getElementById("result");
   el.innerHTML = `
     <div class="card lead ${cls}">
@@ -322,16 +320,22 @@ function renderReport(report){
     </div>
 
     <div class="card">
-      <h2 style="color:var(--ink)">Your savings over time</h2>
-      <p class="muted" id="chartCaption" style="margin-top:-4px"></p>
+      <h2 style="color:var(--ink)">Net worth over time</h2>
+      <p class="muted" id="nwCaption" style="margin-top:-4px"></p>
       <canvas id="nwChart" height="200"></canvas>
+    </div>
+
+    <div class="card">
+      <h2 style="color:var(--ink)">Savings by account type</h2>
+      <p class="muted" id="acctCaption" style="margin-top:-4px"></p>
+      <canvas id="acctChart" height="200"></canvas>
     </div>
 
     <details class="ev">
       <summary>See the year-by-year numbers</summary>
       <div class="scroll" style="margin-top:10px">
         <table class="yb"><thead><tr><th>Age</th><th>Income</th><th>Move to Roth</th><th>Spend</th><th>Tax</th><th>Pre-tax</th><th>Roth</th><th>Regular</th><th>Total</th></tr></thead>
-        <tbody>${rows}</tbody></table>
+        <tbody id="ybBody"></tbody></table>
       </div>
       <p class="muted" style="margin-top:8px">Every dollar, every year — from your answers, run through the same engine professionals' tools use.</p>
     </details>
@@ -364,16 +368,17 @@ function renderReport(report){
   mcSelect(report.monte_carlo.default);   // renders the MC card + the matching savings chart
 }
 
-function drawChart(band){
-  if(typeof Chart === "undefined") return;
+const Y_DOLLARS = v => "$" + (v/1e6).toFixed(1) + "M";
+const moneyTip = c => c.dataset.label + ": " + money0(c.raw);
+
+function drawNetWorth(band){
+  if(typeof Chart === "undefined" || !band) return;
   const ctx = document.getElementById("nwChart");
-  if(!ctx || !band) return;
-  if(nwChart) nwChart.destroy();
-  const labels = band.map(b => b.age);
-  nwChart = new Chart(ctx, {
+  if(!ctx) return;
+  if(nwChartObj) nwChartObj.destroy();
+  nwChartObj = new Chart(ctx, {
     type: "line",
-    data: { labels, datasets: [
-      // band edges first (p10, then p90 filling down to p10), median line on top
+    data: { labels: band.map(b => b.age), datasets: [
       { label: "Worse run (1 in 10)", data: band.map(b => b.p10), borderColor: "rgba(31,56,100,.25)",
         borderWidth: 1, pointRadius: 0, fill: false },
       { label: "Better run (1 in 10)", data: band.map(b => b.p90), borderColor: "rgba(31,56,100,.25)",
@@ -382,11 +387,39 @@ function drawChart(band){
         borderWidth: 2.5, pointRadius: 0, tension: .2, fill: false },
     ]},
     options: { responsive:true, interaction:{mode:"index",intersect:false},
-      scales: { x:{title:{display:true,text:"Your age"}},
-        y:{ beginAtZero:true, ticks:{callback:v => "$"+(v/1e6).toFixed(1)+"M"}} },
-      plugins:{ legend:{position:"bottom"},
-        tooltip:{callbacks:{label:c => c.dataset.label+": "+money0(c.raw)}} } }
+      scales: { x:{title:{display:true,text:"Your age"}}, y:{ beginAtZero:true, ticks:{callback:Y_DOLLARS}} },
+      plugins:{ legend:{position:"bottom"}, tooltip:{callbacks:{label:moneyTip}} } }
   });
+}
+
+function drawAccounts(series){
+  if(typeof Chart === "undefined" || !series) return;
+  const ctx = document.getElementById("acctChart");
+  if(!ctx) return;
+  if(acctChartObj) acctChartObj.destroy();
+  const area = (label, key, color) => ({ label, data: series.map(r => r[key]),
+    backgroundColor: color, borderColor: color, borderWidth: 1, pointRadius: 0, fill: true, tension: .2 });
+  acctChartObj = new Chart(ctx, {
+    type: "line",
+    data: { labels: series.map(r => r.age), datasets: [
+      area("Pre-tax (401k/IRA)", "pretax", "rgba(59,111,182,.65)"),
+      area("Roth (tax-free)", "roth", "rgba(26,127,55,.65)"),
+      area("Regular savings", "taxable", "rgba(191,135,0,.6)"),
+    ]},
+    options: { responsive:true, interaction:{mode:"index",intersect:false},
+      scales: { x:{title:{display:true,text:"Your age"}},
+        y:{ stacked:true, beginAtZero:true, ticks:{callback:Y_DOLLARS}} },
+      plugins:{ legend:{position:"bottom"}, tooltip:{callbacks:{label:moneyTip}} } }
+  });
+}
+
+function renderTable(series){
+  const body = document.getElementById("ybBody");
+  if(!body) return;
+  body.innerHTML = series.filter(r => r.phase === "retired").map(r => `
+    <tr><td>${r.age}</td><td>${money0(r.income)}</td><td>${money0(r.conversion)}</td>
+    <td>${money0(r.spend)}</td><td>${money0(r.tax)}</td><td>${money0(r.pretax)}</td>
+    <td>${money0(r.roth)}</td><td>${money0(r.taxable)}</td><td><b>${money0(r.net_worth)}</b></td></tr>`).join("");
 }
 
 document.getElementById("form").addEventListener("submit", e => {
