@@ -164,6 +164,22 @@ def _render_narrative(name, verdict, retire_age, monthly_spend, actions, watch):
     return "\n".join(lines)
 
 
+def _mc_scenario(cfg, label, mu, strategy, target):
+    """One Monte Carlo regime (cold / normal / hot market) for the dashboard
+    toggle -- a success rate + percentile outcomes + plain framing."""
+    m = simulate.monte_carlo(cfg, n_sims=500, strategy=strategy, target=target, mu=mu)
+    if m["success_rate"] >= 85:
+        color, msg = "green", "Your plan holds up well in this market."
+    elif m["success_rate"] >= 70:
+        color, msg = "yellow", "Usually works, but this market could make it tight."
+    else:
+        color, msg = "red", "In many of these futures the money runs short."
+    m["label"] = label
+    m["sub"] = f"if returns average about {mu * 100:.1f}% a year"
+    m["color"], m["message"] = color, msg
+    return m
+
+
 def _strategy_row(r):
     """Headline figures for one drawdown strategy (do-nothing or optimal)."""
     return {
@@ -205,17 +221,20 @@ def full_report(cfg):
         "monthly_spend": a["retirement_spend_annual"] / 12.0,
     }
 
-    # Monte Carlo: run the RECOMMENDED plan through hundreds of random markets.
+    # Monte Carlo: run the RECOMMENDED plan through random markets, under three
+    # return regimes (cold / normal / hot) so people see the full range.
     mc_strategy = "optimal" if best.get("target") is not None else "none"
-    mc = simulate.monte_carlo(cfg, n_sims=500, strategy=mc_strategy,
-                              target=best.get("target"))
-    if mc["success_rate"] >= 85:
-        mc_color, mc_msg = "green", "Your plan holds up well, even in rough markets."
-    elif mc["success_rate"] >= 70:
-        mc_color, mc_msg = "yellow", "Your plan usually works, but a bad market could strain it."
-    else:
-        mc_color, mc_msg = "red", "In many market futures the money runs short -- worth tightening."
-    mc["color"], mc["message"] = mc_color, mc_msg
+    mc = {
+        "default": "normal",
+        "scenarios": {
+            "bad": _mc_scenario(cfg, "Bad market", a["portfolio_return_conservative"],
+                                mc_strategy, best.get("target")),
+            "normal": _mc_scenario(cfg, "Normal market", a["portfolio_return_base"],
+                                   mc_strategy, best.get("target")),
+            "good": _mc_scenario(cfg, "Good market", a["portfolio_return_optimistic"],
+                                 mc_strategy, best.get("target")),
+        },
+    }
 
     return {
         "plan": plan,

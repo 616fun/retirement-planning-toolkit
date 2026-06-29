@@ -135,6 +135,14 @@ def test_record_false_skips_ledger_but_keeps_summary():
     assert light["trad_end"] == pytest.approx(full["trad_end"])
 
 
+def test_monte_carlo_mu_override():
+    # A cold-market mean (lower mu) never beats a hot-market mean.
+    cfg = _cfg()
+    lo = sim.monte_carlo(cfg, n_sims=300, mu=0.03)
+    hi = sim.monte_carlo(cfg, n_sims=300, mu=0.10)
+    assert hi["success_rate"] >= lo["success_rate"]
+
+
 def test_worse_returns_lower_success():
     # A household on the edge: higher volatility / lower return -> lower success.
     cfg = _cfg()

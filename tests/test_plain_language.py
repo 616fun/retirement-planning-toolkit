@@ -96,11 +96,17 @@ def test_full_report_exposes_the_evidence():
         assert k in r["assumptions"]
 
 
-def test_full_report_includes_monte_carlo():
+def test_full_report_monte_carlo_three_regimes():
     mc = pl.full_report(_cfg())["monte_carlo"]
-    assert 0.0 <= mc["success_rate"] <= 100.0
-    assert mc["color"] in ("green", "yellow", "red")
-    assert mc["message"] and mc["n_sims"] > 0
+    sc = mc["scenarios"]
+    assert set(sc) == {"bad", "normal", "good"} and mc["default"] == "normal"
+    for k in sc:
+        assert 0.0 <= sc[k]["success_rate"] <= 100.0
+        assert sc[k]["color"] in ("green", "yellow", "red")
+        assert sc[k]["message"] and sc[k]["n_sims"] > 0 and sc[k]["label"]
+    # a good market never does worse than a normal one, which never beats... down
+    assert (sc["good"]["success_rate"] >= sc["normal"]["success_rate"]
+            >= sc["bad"]["success_rate"])
 
 
 def test_full_report_reflects_inputs():
