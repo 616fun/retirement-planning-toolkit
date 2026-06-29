@@ -3,7 +3,7 @@
 <head>
 <meta charset="utf-8">
 <meta name="viewport" content="width=device-width, initial-scale=1">
-<title>Your Retirement Plan — in plain English</title>
+<title>Your Retirement Plan</title>
 <!--
   Interface MVP (step I2): a friendly intake wizard.
   Plain questions -> a config the engine understands -> the plain-English plan,
@@ -73,7 +73,7 @@
 </head>
 <body>
 <header>
-  <h1>Your Retirement Plan — in plain English</h1>
+  <h1>Your Retirement Plan</h1>
   <div class="sub">Answer a few questions. Everything runs on your device — your numbers never leave this page.</div>
 </header>
 
@@ -129,7 +129,7 @@
     <div class="card">
       <h2>Your spending</h2>
       <div class="field">
-        <label>About how much will you spend each month in retirement?</label>
+        <label>About how much will you spend each month (in today's dollars) in retirement?</label>
         <div class="prefix"><span>$</span><input type="number" id="monthlySpend" value="6000" min="0" step="100"></div>
         <div class="hint">Everything — housing, food, travel, fun. We'll keep up with rising prices for you.</div>
       </div>
@@ -215,7 +215,7 @@ const money0 = x => "$" + Math.round(x).toLocaleString();
 function downloadReport(){
   if(!lastReport) return;
   const c = lastReport.comparison, a = lastReport.assumptions;
-  let t = "YOUR RETIREMENT PLAN — IN PLAIN ENGLISH\n" + "=".repeat(42) + "\n\n" + lastReport.plan.narrative + "\n\n";
+  let t = "YOUR RETIREMENT PLAN\n" + "=".repeat(42) + "\n\n" + lastReport.plan.narrative + "\n\n";
   t += "THE NUMBERS BEHIND IT\n" + "-".repeat(42) + "\n";
   t += `If you do nothing (only required withdrawals): about ${money0(c.do_nothing.net_cost)} in lifetime taxes.\n`;
   t += `With this plan: about ${money0(c.recommended.net_cost)} in lifetime taxes.\n`;

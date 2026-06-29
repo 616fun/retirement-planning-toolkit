@@ -49,7 +49,7 @@ def _plain_english_panel(cfg):
     spend = f"${p['monthly_spend']:,.0f}"
     return f"""
     <div class="panel" style="border-left:6px solid var(--{cls})">
-      <h2>Your plan, in plain English</h2>
+      <h2>Your retirement plan</h2>
       <p class="conc-bignum {cls}" style="font-size:22px">{html.escape(p['headline'])}</p>
       <p>The plan has you stop working at age <b>{p['retire_age']}</b>. It is built to
          cover about <b>{spend}/month</b> and to keep up as prices rise.</p>

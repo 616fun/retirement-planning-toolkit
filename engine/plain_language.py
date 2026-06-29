@@ -233,7 +233,7 @@ def full_report(cfg):
 def plain_text(cfg):
     """The full plain-English plan as one printable string."""
     p = plan_summary(cfg)
-    return "YOUR RETIREMENT PLAN -- IN PLAIN ENGLISH\n" + ("=" * 42) + "\n\n" + p["narrative"] + "\n"
+    return "YOUR RETIREMENT PLAN\n" + ("=" * 42) + "\n\n" + p["narrative"] + "\n"
 
 
 if __name__ == "__main__":
