@@ -262,8 +262,12 @@ function renderMc(key){
     <p class="muted" style="margin-top:8px">Worst 1 in 10 markets: about <b>${money0(s.end_low)}</b> left at age ${age}; in a typical one, about <b>${money0(s.end_median)}</b>.</p>`;
 }
 function mcSelect(key){
+  const s = lastReport.monte_carlo.scenarios[key];
   document.querySelectorAll("#mcToggle button").forEach(b => b.classList.toggle("on", b.dataset.s === key));
   renderMc(key);
+  drawChart(s.band);                       // the chart follows the chosen market
+  const cap = document.getElementById("chartCaption");
+  if(cap) cap.innerHTML = `In a <b>${esc(s.label.toLowerCase())}</b> (${esc(s.sub)}), the dark line is your most likely savings; the shaded band is the range from a bad to a lucky run.`;
 }
 
 function renderReport(report){
@@ -272,7 +276,6 @@ function renderReport(report){
   const cls = {green:"good",yellow:"warn",red:"bad"}[plan.color] || "good";
   const spend = money0(plan.monthly_spend);
   const li = arr => arr.map(x => `<li>${esc(x)}</li>`).join("");
-  const lasts = c.recommended.money_lasts;
   const mc = report.monte_carlo;
 
   // year-by-year table rows (retired years carry the interesting numbers)
@@ -320,7 +323,7 @@ function renderReport(report){
 
     <div class="card">
       <h2 style="color:var(--ink)">Your savings over time</h2>
-      <p class="muted" style="margin-top:-4px">${lasts ? "In the expected case, your savings are projected to last through age "+a.planned_to_age+"." : "Heads up: in the expected case your savings run low before age "+a.planned_to_age+"."}</p>
+      <p class="muted" id="chartCaption" style="margin-top:-4px"></p>
       <canvas id="nwChart" height="200"></canvas>
     </div>
 
@@ -358,27 +361,29 @@ function renderReport(report){
   el.classList.remove("hidden");
   document.getElementById("form").classList.add("hidden");
   window.scrollTo(0,0);
-  drawChart(report.series);
-  renderMc(report.monte_carlo.default);
+  mcSelect(report.monte_carlo.default);   // renders the MC card + the matching savings chart
 }
 
-function drawChart(series){
+function drawChart(band){
   if(typeof Chart === "undefined") return;
   const ctx = document.getElementById("nwChart");
-  if(!ctx) return;
+  if(!ctx || !band) return;
   if(nwChart) nwChart.destroy();
-  const labels = series.map(r => r.age);
-  const ds = (label, key, color) => ({ label, data: series.map(r => Math.round(r[key])),
-    backgroundColor: color, borderColor: color, fill: true, pointRadius: 0, tension: .25 });
+  const labels = band.map(b => b.age);
   nwChart = new Chart(ctx, {
     type: "line",
     data: { labels, datasets: [
-      ds("Pre-tax (401k/IRA)", "pretax", "#3b6fb6"),
-      ds("Roth (tax-free)", "roth", "#1a7f37"),
-      ds("Regular savings", "taxable", "#bf8700") ] },
+      // band edges first (p10, then p90 filling down to p10), median line on top
+      { label: "Worse run (1 in 10)", data: band.map(b => b.p10), borderColor: "rgba(31,56,100,.25)",
+        borderWidth: 1, pointRadius: 0, fill: false },
+      { label: "Better run (1 in 10)", data: band.map(b => b.p90), borderColor: "rgba(31,56,100,.25)",
+        borderWidth: 1, pointRadius: 0, backgroundColor: "rgba(59,111,182,.15)", fill: "-1" },
+      { label: "Most likely", data: band.map(b => b.p50), borderColor: "#1f3864",
+        borderWidth: 2.5, pointRadius: 0, tension: .2, fill: false },
+    ]},
     options: { responsive:true, interaction:{mode:"index",intersect:false},
       scales: { x:{title:{display:true,text:"Your age"}},
-        y:{stacked:true, ticks:{callback:v => "$"+(v/1e6).toFixed(1)+"M"}} },
+        y:{ beginAtZero:true, ticks:{callback:v => "$"+(v/1e6).toFixed(1)+"M"}} },
       plugins:{ legend:{position:"bottom"},
         tooltip:{callbacks:{label:c => c.dataset.label+": "+money0(c.raw)}} } }
   });

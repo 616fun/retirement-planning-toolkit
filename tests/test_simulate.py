@@ -135,6 +135,23 @@ def test_record_false_skips_ledger_but_keeps_summary():
     assert light["trad_end"] == pytest.approx(full["trad_end"])
 
 
+def test_monte_carlo_band_is_ordered_per_year():
+    cfg = _cfg()
+    m = sim.monte_carlo(cfg, n_sims=200, strategy="optimal", target=170000.0, bands=True)
+    assert "band" in m and len(m["band"]) > 20
+    first, last = m["band"][0], m["band"][-1]
+    assert first["age"] < last["age"]
+    for row in m["band"]:                              # p10 <= p50 <= p90 every year
+        assert row["p10"] <= row["p50"] <= row["p90"]
+
+
+def test_trace_length_matches_horizon():
+    cfg = _cfg()
+    r = sim.simulate(cfg, strategy="none", trace=True, record=False)
+    horizon = 90 - sim.current_age(cfg, "spouse_a")
+    assert len(r["trace"]) == horizon + 1
+
+
 def test_monte_carlo_mu_override():
     # A cold-market mean (lower mu) never beats a hot-market mean.
     cfg = _cfg()

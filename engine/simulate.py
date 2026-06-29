@@ -134,13 +134,16 @@ def _return_at(returns, n, default):
 
 
 def simulate(cfg, *, returns=None, strategy="none", target=None, horizon=None,
-             record=True):
+             record=True, trace=False):
     """Run the household projection and return {ledger, schedule, summary...}.
 
     returns   -- nominal return path (see _return_at); None = config base rate.
     record    -- when False, skip building the per-year ledger/schedule rows
                  (the summary fields are still computed). Monte Carlo passes
                  False so thousands of runs stay fast.
+    trace     -- when True, also return `trace`: the net worth at the end of each
+                 year (one float/year -- cheap even with record=False). Monte
+                 Carlo uses this to build the percentile band of outcomes.
     strategy  -- conversion policy: "none" (RMDs only), "bracket" (fill to top of
                  the 22% bracket, IRMAA-capped in the Medicare window), or
                  "optimal" (fill ordinary income to a level real `target`).
@@ -200,6 +203,7 @@ def simulate(cfg, *, returns=None, strategy="none", target=None, horizon=None,
         horizon = max(1, 90 - a_age0)
     lifetime_tax, lifetime_aca, insolvent = 0.0, 0.0, False
     ledger, schedule = [], []
+    trace_out = [] if trace else None        # net worth per year (for the MC band)
     magi_history = {}                        # year_index -> MAGI, for IRMAA lookback
 
     # Draw `amount` from taxable -> pre-tax -> Roth, realizing proportional
@@ -238,6 +242,8 @@ def simulate(cfg, *, returns=None, strategy="none", target=None, horizon=None,
             # runway for the projection tabs.
             if record:
                 ledger.append(_working_row(year, a_age, b_age, trad, roth, taxable, re_total))
+            if trace:
+                trace_out.append(trad + roth + taxable + re_total)
             continue
 
         idx = (1 + infl) ** n
@@ -336,6 +342,8 @@ def simulate(cfg, *, returns=None, strategy="none", target=None, horizon=None,
                 "trad": trad, "roth": roth, "taxable": taxable,
                 "portfolio": trad + roth + taxable, "net_worth": trad + roth + taxable + re_total,
             })
+        if trace:
+            trace_out.append(trad + roth + taxable + re_total)
 
     # ---- terminal tax: pre-tax balance left to heirs (SECURE 10-year rule) ----
     terminal_tax = (trad * tax_us.HEIR_MARGINAL_RATE) / ((1 + infl) ** horizon)
@@ -350,7 +358,7 @@ def simulate(cfg, *, returns=None, strategy="none", target=None, horizon=None,
         "lifetime_tax": lifetime_tax, "terminal_tax": terminal_tax, "total_tax": total_tax,
         "lifetime_aca_subsidy": lifetime_aca, "net_cost": net_cost,
         "trad_end": trad, "roth_end": roth, "taxable_end": taxable, "estate_end": estate,
-        "insolvent": insolvent, "ledger": ledger, "schedule": schedule,
+        "insolvent": insolvent, "ledger": ledger, "schedule": schedule, "trace": trace_out,
     }
 
 
@@ -386,7 +394,7 @@ def optimize_conversions(cfg):
 
 
 def monte_carlo(cfg, *, n_sims=500, strategy="none", target=None, mu=None,
-                sigma=0.12, seed=12345):
+                sigma=0.12, seed=12345, bands=False):
     """Run the plan through `n_sims` random market futures and report how often
     the money lasts to the horizon. Each year's return is drawn from a normal
     distribution around the mean `mu` (default: the config's base return) with
@@ -395,31 +403,44 @@ def monte_carlo(cfg, *, n_sims=500, strategy="none", target=None, mu=None,
     Deterministic for a given seed, so results are reproducible.
 
     Returns success_rate (% of futures where the plan stays solvent to age 90)
-    plus the 10th / 50th / 90th percentile ending estate."""
+    plus the 10th / 50th / 90th percentile ending estate. When `bands` is True,
+    also returns `band`: the 10th / 50th / 90th percentile of net worth at EACH
+    year -- the fan chart of outcomes."""
     a = cfg["assumptions"]
     if mu is None:
         mu = a["portfolio_return_base"]
     rng = random.Random(seed)
-    horizon = max(1, 90 - current_age(cfg, "spouse_a"))
-    successes, ends = 0, []
+    a_age0 = current_age(cfg, "spouse_a")
+    horizon = max(1, 90 - a_age0)
+    successes, ends, traces = 0, [], []
     for _ in range(n_sims):
         path = [rng.gauss(mu, sigma) for _ in range(horizon + 1)]
-        r = simulate(cfg, returns=path, strategy=strategy, target=target, record=False)
+        r = simulate(cfg, returns=path, strategy=strategy, target=target,
+                     record=False, trace=bands)
         if not r["insolvent"]:
             successes += 1
         ends.append(r["estate_end"])
+        if bands:
+            traces.append(r["trace"])
     ends.sort()
 
-    def pctile(p):
-        if not ends:
-            return 0.0
-        return ends[min(len(ends) - 1, int(p / 100.0 * len(ends)))]
+    def pctile(col, p):
+        return col[min(len(col) - 1, int(p / 100.0 * len(col)))] if col else 0.0
 
-    return {
+    out = {
         "n_sims": n_sims,
         "success_rate": round(100.0 * successes / n_sims, 1),
-        "end_low": pctile(10), "end_median": pctile(50), "end_high": pctile(90),
+        "end_low": pctile(ends, 10), "end_median": pctile(ends, 50),
+        "end_high": pctile(ends, 90),
     }
+    if bands and traces:
+        band = []
+        for n in range(len(traces[0])):
+            col = sorted(t[n] for t in traces)
+            band.append({"age": a_age0 + n, "p10": round(pctile(col, 10)),
+                         "p50": round(pctile(col, 50)), "p90": round(pctile(col, 90))})
+        out["band"] = band
+    return out
 
 
 def _working_row(year, a_age, b_age, trad, roth, taxable, re_total):
