@@ -93,13 +93,18 @@
         <div class="field spouseOnly"><label>Spouse's age</label><input type="number" id="ageB" value="55" min="18" max="90"></div>
       </div>
       <div class="row">
-        <div class="field"><label>Retire at age</label><input type="number" id="retireAge" value="62" min="50" max="75"></div>
-        <div class="field"><label>Claim Social Security at age <span class="hint">(62–70)</span></label><input type="number" id="ssAgeA" value="67" min="62" max="70"></div>
+        <div class="field"><label>Your retirement age</label><input type="number" id="retireA" value="62" min="50" max="80"></div>
+        <div class="field spouseOnly"><label>Spouse's retirement age</label><input type="number" id="retireB" value="62" min="50" max="80"></div>
+      </div>
+      <div class="row">
+        <div class="field"><label>You claim Social Security at <span class="hint">(62–70)</span></label><input type="number" id="ssAgeA" value="67" min="62" max="70"></div>
+        <div class="field spouseOnly"><label>Spouse claims Social Security at <span class="hint">(62–70)</span></label><input type="number" id="ssAgeB" value="67" min="62" max="70"></div>
       </div>
     </div>
 
     <div class="card">
       <h2>Your savings</h2>
+      <p class="hint spouseOnly" style="margin:-6px 0 12px">For a couple, add both you and your spouse together in each box — enter your combined household totals.</p>
       <div class="field">
         <label>Pre-tax retirement savings <span class="hint">— 401(k) and traditional IRA totals</span></label>
         <div class="prefix"><span>$</span><input type="number" id="pretax" value="500000" min="0" step="1000"></div>
@@ -179,13 +184,14 @@ document.getElementById("couple").addEventListener("click", e => {
 function buildConfig(){
   const yr = new Date().getFullYear();
   const ageA = num("ageA"), ageB = couple ? num("ageB") : num("ageA");
-  const ret = num("retireAge"), ssA = num("ssAgeA");
+  const retA = num("retireA"), retB = couple ? num("retireB") : num("retireA");
+  const ssA = num("ssAgeA"), ssB = couple ? num("ssAgeB") : num("ssAgeA");
   return {
     household: { name:"My Household", filing_status:"MFJ", state:"--",
       state_income_tax_rate: num("stateRate")/100, local_income_tax_rate: 0,
       members: [
-        { id:"spouse_a", display_name:"You", birth_year: yr-ageA, retirement_age: ret, ss_claim_age: ssA },
-        { id:"spouse_b", display_name: couple?"Spouse":"(none)", birth_year: yr-ageB, retirement_age: ret, ss_claim_age: ssA }
+        { id:"spouse_a", display_name:"You", birth_year: yr-ageA, retirement_age: retA, ss_claim_age: ssA },
+        { id:"spouse_b", display_name: couple?"Spouse":"(none)", birth_year: yr-ageB, retirement_age: retB, ss_claim_age: ssB }
       ]},
     employer_stock: { employer_name:"(none)", ticker:"NONE", sec_identity:"", major_holder_flag_name:null,
       watch_threshold_pct:5, trim_threshold_pct:7,
