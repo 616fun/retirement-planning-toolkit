@@ -107,6 +107,9 @@ def test_full_report_monte_carlo_three_regimes():
     # a good market never does worse than a normal one, which never beats... down
     assert (sc["good"]["success_rate"] >= sc["normal"]["success_rate"]
             >= sc["bad"]["success_rate"])
+    # each scenario carries its own savings band for the chart
+    for k in sc:
+        assert sc[k]["band"] and all(b["p10"] <= b["p50"] <= b["p90"] for b in sc[k]["band"])
 
 
 def test_full_report_reflects_inputs():

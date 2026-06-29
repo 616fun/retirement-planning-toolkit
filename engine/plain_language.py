@@ -167,7 +167,8 @@ def _render_narrative(name, verdict, retire_age, monthly_spend, actions, watch):
 def _mc_scenario(cfg, label, mu, strategy, target):
     """One Monte Carlo regime (cold / normal / hot market) for the dashboard
     toggle -- a success rate + percentile outcomes + plain framing."""
-    m = simulate.monte_carlo(cfg, n_sims=500, strategy=strategy, target=target, mu=mu)
+    m = simulate.monte_carlo(cfg, n_sims=500, strategy=strategy, target=target,
+                             mu=mu, bands=True)
     if m["success_rate"] >= 85:
         color, msg = "green", "Your plan holds up well in this market."
     elif m["success_rate"] >= 70:
