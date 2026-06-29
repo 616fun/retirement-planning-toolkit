@@ -385,17 +385,20 @@ def optimize_conversions(cfg):
     return best
 
 
-def monte_carlo(cfg, *, n_sims=500, strategy="none", target=None, sigma=0.12, seed=12345):
+def monte_carlo(cfg, *, n_sims=500, strategy="none", target=None, mu=None,
+                sigma=0.12, seed=12345):
     """Run the plan through `n_sims` random market futures and report how often
     the money lasts to the horizon. Each year's return is drawn from a normal
-    distribution around the assumed base return (std dev `sigma`). Uses the
-    stdlib `random` only -- no numpy -- so it runs in the browser. Deterministic
-    for a given seed, so results are reproducible.
+    distribution around the mean `mu` (default: the config's base return) with
+    std dev `sigma`. Pass a lower/higher `mu` to model a cold/hot market regime.
+    Uses the stdlib `random` only -- no numpy -- so it runs in the browser.
+    Deterministic for a given seed, so results are reproducible.
 
     Returns success_rate (% of futures where the plan stays solvent to age 90)
     plus the 10th / 50th / 90th percentile ending estate."""
     a = cfg["assumptions"]
-    mu = a["portfolio_return_base"]
+    if mu is None:
+        mu = a["portfolio_return_base"]
     rng = random.Random(seed)
     horizon = max(1, 90 - current_age(cfg, "spouse_a"))
     successes, ends = 0, []
