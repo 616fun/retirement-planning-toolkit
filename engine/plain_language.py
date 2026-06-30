@@ -267,6 +267,23 @@ def full_report(cfg):
         "series": series,
         "assumptions": assumptions,
         "monte_carlo": mc,
+        "ss_claiming": _ss_claiming_block(cfg),
+    }
+
+
+def _ss_claiming_block(cfg):
+    """When-to-claim-Social-Security recommendation (lifetime-benefit PV)."""
+    import ss_claiming
+    best = ss_claiming.optimize_ss_claim_ages(cfg)
+    return {
+        "recommended": {"you": best["a_claim"], "spouse": best["b_claim"]},
+        "configured": {"you": best["configured"]["a_claim"],
+                       "spouse": best["configured"]["b_claim"]},
+        "fra": {"you": round(best["a_fra"], 2), "spouse": round(best["b_fra"], 2)},
+        "lifetime_pv": best["pv"],
+        "extra_vs_configured": best["gain_vs_configured"],
+        "one_earner": best["one_earner"],
+        "grid": best["grid"],
     }
 
 

@@ -212,6 +212,28 @@ Replaces the old flat-85% assumption with the real 0/50/85% inclusion tiers.
   1993), so over a multi-decade plan a rising share of SS becomes taxable — the
   "tax torpedo." The engine deliberately does **not** index them.
 
+## Social Security claim-age optimization — `ss_claiming.py`
+
+The engine takes each spouse's benefit as a fixed amount **at the configured
+claim age**. The optimizer recovers the Primary Insurance Amount (benefit at Full
+Retirement Age) from that input and re-prices the benefit at each candidate age,
+so no new input is required.
+
+| Rule | Value | Source |
+|---|---|---|
+| Full Retirement Age | 67 (born 1960+), graded to 65 (pre-1938) | SSA |
+| Early-claim reduction | 5/9 of 1% per month, first 36 mo; 5/12 of 1% beyond | SSA — 62 → 70% of PIA at FRA 67 |
+| Delayed-retirement credit | +2/3 of 1% per month, accrues only to age 70 | SSA — 70 → 124% of PIA at FRA 67 |
+
+- **Objective:** maximize the present value (today's $) of cumulative lifetime
+  benefits to the planning horizon (the breakeven framework — matches the classic
+  "claim later if you expect to live past the breakeven age"). Each candidate runs
+  through the full kernel, so SS taxation and solvency stay consistent; an
+  insolvent combination is never recommended.
+- **Not yet modelled:** spousal and survivor benefits (the optimizer treats each
+  spouse's benefit independently), and a mortality-weighted objective (it uses a
+  fixed horizon, not a survival curve). Both are roadmapped.
+
 ## Capital gains, NIIT — `tax_us.py`
 
 Draws from the taxable brokerage realize proportional long-term gains (basis is
