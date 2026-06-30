@@ -1,0 +1,85 @@
+{
+  "_comment": "FICTIONAL SAMPLE DATA -- the Avery household, a SINGLE filer (one member). Demonstrates single-filer support: the engine taxes a one-member household as single (tighter brackets, smaller standard deduction, lower IRMAA floors). Spouse-B income/benefit keys are omitted because they are not required for a single household. Replace everything with your own values in config/config.json.",
+
+  "household": {
+    "name": "Avery Household",
+    "members": [
+      { "id": "spouse_a", "display_name": "Avery", "birth_year": 1975, "retirement_age": 60, "ss_claim_age": 67 }
+    ],
+    "filing_status": "single",
+    "state": "TX",
+    "state_income_tax_rate": 0.0,
+    "local_income_tax_rate": 0.0
+  },
+
+  "employer_stock": {
+    "employer_name": "Coca-Cola Company",
+    "ticker": "KO",
+    "sec_identity": "Sample User sample@example.com",
+    "major_holder_flag_name": null,
+    "watch_threshold_pct": 5.0,
+    "trim_threshold_pct": 7.0,
+    "holdings": {
+      "employer_stock_in_401k": 40000,
+      "unvested_rsu_value": 0,
+      "vested_shares_value": 0
+    }
+  },
+
+  "accounts": {
+    "spouse_a_401k_pretax": 520000,
+    "spouse_a_401k_roth": 50000,
+    "spouse_a_trad_ira": 180000,
+    "spouse_a_roth_ira": 90000,
+    "joint_brokerage": 240000,
+    "hsa": 30000,
+    "cash_and_cds": 55000,
+    "deferred_comp": 0,
+    "college_529_a": 0
+  },
+
+  "real_estate": {
+    "primary_residence": 310000,
+    "other_property": 0
+  },
+
+  "income": {
+    "spouse_a_salary": 145000,
+    "spouse_a_bonus_pct": 0.10,
+    "spouse_a_rsu_annual": 0,
+    "pension_monthly_at_retirement": 1500,
+    "pension_cola": 0.02,
+    "passive_income_annual": 0
+  },
+
+  "social_security": {
+    "spouse_a_monthly_benefit": 2900
+  },
+
+  "healthcare": {
+    "_comment": "ACA marketplace premium tax credit, pre-65. household_size 1 for a single filer.",
+    "aca_household_size": 1,
+    "aca_benchmark_premium_annual": 9000
+  },
+
+  "assumptions": {
+    "portfolio_return_base": 0.075,
+    "portfolio_return_conservative": 0.055,
+    "portfolio_return_optimistic": 0.09,
+    "inflation_rate": 0.02,
+    "retirement_spend_annual": 85000,
+    "target_equity_pct": 65,
+    "target_bond_pct": 35,
+    "bridge_target": 400000,
+    "standard_deduction_mfj": 32200,
+    "irmaa_tier1_magi_mfj": 218000,
+    "taxable_unrealized_gain_pct": 0.5,
+    "aca_enhanced_subsidies": false
+  },
+
+  "paths": {
+    "model_xlsx": "model/financial_plan.xlsx",
+    "dashboard_html": "dashboard/dashboard.html",
+    "market_intelligence_json": "market_intelligence.json"
+  }
+}

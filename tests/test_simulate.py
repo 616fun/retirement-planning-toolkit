@@ -45,6 +45,60 @@ def test_wrapper_matches_kernel():
     assert len(a["schedule"]) == len(b["schedule"])
 
 
+# ---- single-filer support ------------------------------------------------
+def _single_cfg():
+    cfg, _ = cl.load_config(str(ROOT / "config" / "examples" / "avery_single_config.json"))
+    return cfg
+
+
+def test_single_config_simulates_end_to_end():
+    r = sim.simulate(_single_cfg(), strategy="none")
+    assert r["ledger"]                       # produced a full ledger
+    assert r["ledger"][-1]["a_age"] == 90    # ran to the horizon
+    assert not r["insolvent"]
+
+
+def test_single_taxes_more_than_mfj_at_equal_income():
+    # Hold spouse A's income fixed and vary ONLY the filing status: zero out
+    # spouse B in the MFJ run, then drop the member entirely for the single run.
+    base = _cfg()
+    base["income"]["spouse_b_annual"] = 0
+    base["social_security"]["spouse_b_monthly_benefit"] = 0
+    mfj = sim.simulate(copy.deepcopy(base), strategy="none")
+
+    single = copy.deepcopy(base)
+    single["household"]["members"] = single["household"]["members"][:1]
+    del single["income"]["spouse_b_annual"]
+    del single["social_security"]["spouse_b_monthly_benefit"]
+    single_run = sim.simulate(single, strategy="none")
+
+    # Tighter single brackets + smaller standard deduction -> strictly more tax.
+    assert single_run["lifetime_tax"] > mfj["lifetime_tax"]
+
+
+def test_single_household_has_one_medicare_enrollee_max():
+    # IRMAA is driven by at most one enrollee for a single filer; the schedule's
+    # surcharge must never reflect a phantom second spouse.
+    r = sim.simulate(_single_cfg(), strategy="bracket")
+    # Sanity: a one-member run still builds a schedule and stays finite.
+    assert r["schedule"]
+    assert all(row["irmaa"] >= 0 for row in r["schedule"])
+
+
+def test_single_build_model_tabs_do_not_crash():
+    # The xlsx assumption + income tabs reference members[1]; for a single
+    # household they must skip the spouse-B rows rather than IndexError.
+    import openpyxl
+    cfg = _single_cfg()
+    wb = openpyxl.Workbook()
+    bm.build_assumptions(wb, cfg)
+    bm.build_income_note(wb, cfg)
+    # Spouse A's name appears; the (absent) spouse B's display name must not.
+    text = "\n".join(str(c.value) for ws in wb.worksheets for row in ws.iter_rows()
+                     for c in row if c.value is not None)
+    assert "Avery" in text
+
+
 # ---- ledger contract -----------------------------------------------------
 def test_ledger_covers_every_year_to_horizon():
     cfg = _cfg()

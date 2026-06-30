@@ -79,27 +79,37 @@ _REQUIRED = {
 _MEMBER_KEYS = ["id", "display_name", "birth_year", "retirement_age", "ss_claim_age"]
 
 
+# Required keys that describe a second spouse -- not required for a single
+# (one-member) household. Dropped from validation when len(members) == 1.
+_SPOUSE_B_KEYS = {"income": ["spouse_b_annual"],
+                  "social_security": ["spouse_b_monthly_benefit"]}
+
+
 def validate_config(cfg):
-    """Validate config shape; raise ConfigError listing every problem at once."""
+    """Validate config shape; raise ConfigError listing every problem at once.
+
+    The household may have 1 member (taxed as single) or 2 (taxed as MFJ). For a
+    single household the spouse-B income/benefit keys are not required.
+    """
     errors = []
+    members = cfg.get("household", {}).get("members")
+    single = isinstance(members, list) and len(members) == 1
     for section, keys in _REQUIRED.items():
         sec = cfg.get(section)
         if not isinstance(sec, dict):
             errors.append(f"missing or invalid section '{section}' (must be an object)")
             continue
+        skip = set(_SPOUSE_B_KEYS.get(section, [])) if single else set()
         for k in keys:
-            if k not in sec:
+            if k not in sec and k not in skip:
                 errors.append(f"{section}.{k} is required")
 
-    # The toolkit models a two-spouse household; enforce it clearly.
-    members = cfg.get("household", {}).get("members")
-    if not isinstance(members, list) or len(members) != 2:
+    # The toolkit models 1 (single) or 2 (married filing jointly) members.
+    if not isinstance(members, list) or len(members) not in (1, 2):
         n = len(members) if isinstance(members, list) else "none"
         errors.append(
-            f"household.members must be a list of exactly 2 members -- this toolkit "
-            f"models a two-spouse household (got {n}). A single-person variant is on "
-            f"the roadmap; for now duplicate the member or set the second spouse's "
-            f"incomes/benefits to 0.")
+            f"household.members must be a list of 1 or 2 members -- one member is "
+            f"taxed as single, two as married-filing-jointly (got {n}).")
     elif not errors:  # only dig into members if the section structure is sound
         for i, m in enumerate(members):
             if not isinstance(m, dict):

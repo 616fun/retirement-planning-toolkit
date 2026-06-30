@@ -97,14 +97,18 @@ def build_assumptions(wb, cfg):
         (f"{members[0]['display_name']} salary", inc["spouse_a_salary"], ""),
         (f"{members[0]['display_name']} bonus %", inc["spouse_a_bonus_pct"], ""),
         (f"{members[0]['display_name']} RSU annual", inc["spouse_a_rsu_annual"], ""),
-        (f"{members[1]['display_name']} income", inc["spouse_b_annual"], ""),
         (f"{members[0]['display_name']} retirement age", members[0]["retirement_age"], ""),
-        (f"{members[1]['display_name']} retirement age", members[1]["retirement_age"], ""),
         (f"{members[0]['display_name']} SS claim age", members[0]["ss_claim_age"], ""),
-        (f"{members[1]['display_name']} SS claim age", members[1]["ss_claim_age"], ""),
         (f"{members[0]['display_name']} SS monthly", cfg["social_security"]["spouse_a_monthly_benefit"], ""),
-        (f"{members[1]['display_name']} SS monthly", cfg["social_security"]["spouse_b_monthly_benefit"], ""),
     ]
+    # Spouse-B rows only for a two-member (MFJ) household.
+    if len(members) > 1:
+        rows += [
+            (f"{members[1]['display_name']} income", inc["spouse_b_annual"], ""),
+            (f"{members[1]['display_name']} retirement age", members[1]["retirement_age"], ""),
+            (f"{members[1]['display_name']} SS claim age", members[1]["ss_claim_age"], ""),
+            (f"{members[1]['display_name']} SS monthly", cfg["social_security"]["spouse_b_monthly_benefit"], ""),
+        ]
     start = ws.max_row + 1
     for i, r in enumerate(rows):
         ws.append(r)
@@ -377,7 +381,10 @@ def build_income_note(wb, cfg):
         (f"{m[0]['display_name']} salary", inc["spouse_a_salary"], ""),
         (f"{m[0]['display_name']} bonus", round(inc["spouse_a_salary"] * inc["spouse_a_bonus_pct"]), ""),
         (f"{m[0]['display_name']} RSU", inc["spouse_a_rsu_annual"], "employer stock -- see concentration tab"),
-        (f"{m[1]['display_name']} income", inc["spouse_b_annual"], ""),
+    ]
+    if len(m) > 1:
+        rows.append((f"{m[1]['display_name']} income", inc["spouse_b_annual"], ""))
+    rows += [
         ("Pension (annual at retirement)", inc["pension_monthly_at_retirement"] * 12, ""),
         ("Passive income", inc["passive_income_annual"], ""),
     ]
