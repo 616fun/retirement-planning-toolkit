@@ -91,6 +91,35 @@ inflation-adjusted figures.
 > before the tax year (e.g. the 2026 figures in a late-2025 Rev. Proc.). Confirm
 > against that document before relying on absolute tax numbers.
 
+## Single filer (one-member household), 2026
+
+The engine taxes a **one-member** household as **single** and a two-member
+household as **MFJ** (`tax_us.normalize_status`; the kernel passes the status
+through every tax call). All single figures below are the 2026 counterparts of
+the MFJ tables above and carry the same ⚠ VERIFY caveat.
+
+| Item | Single value | Relationship to MFJ | Constant |
+|---|---|---|---|
+| 10% bracket top (taxable) | $12,400 | exactly ½ MFJ | `FEDERAL_BRACKETS_SINGLE` ⚠ VERIFY |
+| 12% bracket top | $50,400 | exactly ½ MFJ | ⚠ VERIFY |
+| 22% bracket top | $105,700 | exactly ½ MFJ | ⚠ VERIFY |
+| 24% bracket top | $201,775 | exactly ½ MFJ | ⚠ VERIFY |
+| 32% bracket top | $256,225 | exactly ½ MFJ | ⚠ VERIFY |
+| 35% bracket top | $640,600 | **not** ½ MFJ (single top is lower) | ⚠ VERIFY |
+| Standard deduction | $16,100 | exactly ½ MFJ | `STANDARD_DEDUCTION_SINGLE` ⚠ VERIFY |
+| IRMAA Tier 1–4 floors | $109k / $137k / $171k / $205k | exactly ½ MFJ | `IRMAA_SINGLE` ⚠ VERIFY |
+| IRMAA top floor | $500,000 | **not** ½ MFJ ($750k) | ⚠ VERIFY |
+| IRMAA surcharge $/person | identical to MFJ | per-enrollee, status-independent | `IRMAA_SINGLE` |
+| SS §86 provisional bases | $25,000 / $34,000 | statutory, not indexed | `SS_PI_BASE1/2_SINGLE` |
+| LTCG 0% / 15% tops | $48,475 / $540,700 | 0% ≈ ½ MFJ; 15% not | `CAP_GAINS_BRACKETS_SINGLE` ⚠ VERIFY |
+| NIIT threshold | $200,000 | statutory, not indexed | `NIIT_THRESHOLD_SINGLE` |
+| ACA FPL household size | 1 | drives the FPL ratio | `federal_poverty_level(1)` |
+
+- The IRS sets the lower five ordinary brackets and the standard deduction at
+  **exactly half** the MFJ figure; the 35% top and the LTCG 15% top diverge (the
+  single edge is lower), as do the top IRMAA floor and the §86/NIIT statutory
+  bases. Re-verify the single column against the same Rev. Proc. / CMS release.
+
 ## IRMAA — Medicare premium surcharge, MFJ 2026 (CMS)
 
 `IRMAA_MFJ`, **annual** surcharge **per person** (Part B + Part D combined). CMS
