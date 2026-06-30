@@ -178,3 +178,51 @@ def test_aca_cliff_under_current_law():
 def test_aca_enhanced_has_no_cliff():
     fpl = tax_us.federal_poverty_level(2)
     assert tax_us.aca_subsidy(4.0 * fpl + 5000, 2, 18000, enhanced=True) > 0.0
+
+
+# ---- single filer (filing-status switch) ---------------------------------
+def test_normalize_status_and_defaults():
+    assert tax_us.normalize_status("single") == "single"
+    assert tax_us.normalize_status("MFJ") == "mfj"
+    assert tax_us.normalize_status(None) == "mfj"          # default
+    assert tax_us.normalize_status("married") == "mfj"
+    assert tax_us.standard_deduction("single") == tax_us.STANDARD_DEDUCTION_SINGLE
+    assert tax_us.standard_deduction() == tax_us.STANDARD_DEDUCTION_MFJ
+
+
+def test_single_pays_more_federal_than_mfj():
+    # Tighter brackets + smaller standard deduction -> strictly more tax.
+    for agi in (60000, 120000, 250000, 500000):
+        assert tax_us.federal_tax(agi, status="single") > tax_us.federal_tax(agi)
+
+
+def test_single_known_bracket_math():
+    # AGI 100k, single std 16.1k -> taxable 83.9k.
+    # 10%*12,400 + 12%*38,000 + 22%*33,500 = 1,240 + 4,560 + 7,370 = 13,170.
+    assert tax_us.federal_tax(100000, status="single") == pytest.approx(13170, abs=1)
+
+
+def test_single_irmaa_floor_is_lower():
+    # $120k MAGI: no surcharge for MFJ (floor $218k) but Tier 1 for single ($109k).
+    assert tax_us.irmaa_annual(120000, n_enrolled=1) == 0.0
+    assert tax_us.irmaa_annual(120000, n_enrolled=1, status="single") == pytest.approx(1143)
+    assert tax_us.irmaa_tier1_magi(status="single") == pytest.approx(109000)
+
+
+def test_single_ss_thresholds_bite_earlier():
+    full = tax_us.ss_taxable_amount(40000, 30000)                  # MFJ bases 32k/44k
+    more = tax_us.ss_taxable_amount(40000, 30000, status="single")  # single bases 25k/34k
+    assert more > full
+    assert tax_us.SS_PI_BASE1_SINGLE == 25000.0 and tax_us.SS_PI_BASE2_SINGLE == 34000.0
+
+
+def test_single_niit_threshold_is_200k():
+    assert tax_us.niit(50000, 220000) == 0.0                            # under MFJ $250k
+    assert tax_us.niit(50000, 220000, status="single") == pytest.approx(0.038 * 20000)
+
+
+def test_single_ltcg_zero_bracket_is_smaller():
+    # A $60k gain on zero ordinary income is all 0% for MFJ but spills into 15%
+    # for single (0% top ~$48.5k).
+    assert tax_us.capital_gains_tax(0, 60000) == 0.0
+    assert tax_us.capital_gains_tax(0, 60000, status="single") > 0.0
