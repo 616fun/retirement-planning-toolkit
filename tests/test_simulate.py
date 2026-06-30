@@ -20,20 +20,20 @@ def _cfg():
 # on taxable draws, NIIT, ACA). Re-snapshot deliberately if the model changes.
 def test_snapshot_do_nothing_baseline():
     r = sim.simulate(_cfg(), strategy="none")
-    assert r["total_tax"] == pytest.approx(3747670.76, abs=1.0)
+    assert r["total_tax"] == pytest.approx(3748450.76, abs=1.0)
     assert r["trad_end"] == pytest.approx(16967559.47, abs=1.0)
 
 
 def test_snapshot_bracket_heuristic():
     r = sim.simulate(_cfg(), strategy="bracket")
-    assert r["total_tax"] == pytest.approx(532642.70, abs=1.0)
-    assert r["roth_end"] == pytest.approx(16565762.12, abs=1.0)
+    assert r["total_tax"] == pytest.approx(532660.70, abs=1.0)
+    assert r["roth_end"] == pytest.approx(16565604.39, abs=1.0)
 
 
 def test_snapshot_optimizer():
     best = bm._optimize_conversions(_cfg())
     assert best["target"] == 170000.0
-    assert best["net_cost"] == pytest.approx(490748.62, abs=1.0)
+    assert best["net_cost"] == pytest.approx(490751.82, abs=1.0)
     assert len(best["schedule"]) == 34
 
 
@@ -339,4 +339,4 @@ def test_no_spending_block_preserves_baseline():
     # Backward compatibility: absent spending block == flat (snapshot intact).
     assert "spending" not in _cfg()
     r = sim.simulate(_cfg(), strategy="none")
-    assert r["total_tax"] == pytest.approx(3747670.76, abs=1.0)
+    assert r["total_tax"] == pytest.approx(3748450.76, abs=1.0)

@@ -45,8 +45,8 @@ FEDERAL_BRACKETS_MFJ = [
     (0.35, 768700),
     (0.37, None),
 ]
-# SINGLE 2026 -- the lower five edges are exactly half the MFJ figure (IRS
-# structure); only the 35% top diverges (single ~$640,600 vs MFJ $768,700). VERIFY.
+# SINGLE 2026 (Rev. Proc. 2025-32, verified 2026-06-30) -- the lower five edges
+# are exactly half the MFJ figure; only the 35% top diverges ($640,600 vs $768,700).
 FEDERAL_BRACKETS_SINGLE = [
     (0.10, 12400),
     (0.12, 50400),
@@ -63,24 +63,28 @@ SS_TAXABLE_FRACTION = 0.85              # share of Social Security taxed federal
 # IRMAA 2026 MFJ cascade: (MAGI floor, ANNUAL surcharge PER PERSON, Part B + D).
 # Surcharge applies two calendar years after the MAGI is earned, and only once a
 # spouse is enrolled in Medicare (age 65+). CMS-verified 2026 figures.
+# 2026 CMS-verified (fact sheet released 2025-11-14). Annual = 12 x (monthly
+# Part B IRMAA add-on + monthly Part D IRMAA add-on), per person. Part B standard
+# premium $202.90; Part B add-ons run $81.20/$202.90/$324.64/$446.38/$486.96 and
+# Part D add-ons $14.50/$37.50/$60.40/$83.30/$91.00 across the five tiers.
 IRMAA_MFJ = [
     (0,       0.0),
-    (218000,  1143.0),
-    (274000,  2867.0),
-    (342000,  4587.0),
-    (410000,  6306.0),
-    (750000,  6879.0),
+    (218000,  1148.0),
+    (274000,  2885.0),
+    (342000,  4620.0),
+    (410000,  6356.0),
+    (750000,  6936.0),
 ]
 # SINGLE 2026: same per-person surcharge dollars (IRMAA is per enrollee, not per
 # return); only the MAGI floors differ -- half of MFJ for the first four tiers,
-# top tier at $500k (vs MFJ $750k). CMS-verified structure. VERIFY the dollars.
+# top tier at $500k (vs MFJ $750k). CMS-verified 2026.
 IRMAA_SINGLE = [
     (0,       0.0),
-    (109000,  1143.0),
-    (137000,  2867.0),
-    (171000,  4587.0),
-    (205000,  6306.0),
-    (500000,  6879.0),
+    (109000,  1148.0),
+    (137000,  2885.0),
+    (171000,  4620.0),
+    (205000,  6356.0),
+    (500000,  6936.0),
 ]
 MEDICARE_AGE = 65
 IRMAA_LOOKBACK_YEARS = 2
@@ -257,8 +261,10 @@ def ss_taxable_amount(ss_total, other_income, status="mfj"):
 # ---- Long-term capital gains (stacked on top of ordinary taxable income) ---
 # MFJ breakpoints are taxable-income thresholds; the gain fills the 0/15/20%
 # bands ABOVE ordinary taxable income. Breakpoints index with inflation.
-CAP_GAINS_BRACKETS_MFJ = [(0.0, 96950), (0.15, 600050), (0.20, None)]  # 2026 VERIFY
-CAP_GAINS_BRACKETS_SINGLE = [(0.0, 48475), (0.15, 540700), (0.20, None)]  # 2026 VERIFY
+# 2026 verified against Tax Foundation / IRS Rev. Proc. 2025-32 (taxable-income
+# breakpoints where the gain starts being taxed at 15% / 20%).
+CAP_GAINS_BRACKETS_MFJ = [(0.0, 98900), (0.15, 613700), (0.20, None)]
+CAP_GAINS_BRACKETS_SINGLE = [(0.0, 49450), (0.15, 545500), (0.20, None)]
 _CAP_GAINS = {"mfj": CAP_GAINS_BRACKETS_MFJ, "single": CAP_GAINS_BRACKETS_SINGLE}
 
 
@@ -300,8 +306,10 @@ def niit(net_investment_income, magi, status="mfj"):
 # ---- ACA premium tax credit -----------------------------------------------
 # Federal Poverty Level (48 contiguous states; prior year's FPL applies to a
 # coverage year). Updated annually -- indexed here ~ inflation.
-FPL_BASE_1PERSON = 15060.0       # 2025 FPL VERIFY
-FPL_PER_ADDL_PERSON = 5380.0     # VERIFY
+# 2025 HHS poverty guidelines (48 contiguous states) -- the PRIOR-year FPL
+# applies to a coverage year, so the 2025 figures govern 2026 ACA coverage.
+FPL_BASE_1PERSON = 15650.0       # 2025 HHS, 1 person
+FPL_PER_ADDL_PERSON = 5500.0     # 2025 HHS, each additional person
 ACA_CLIFF_FPL = 4.00             # 400% FPL subsidy cliff (current law, post-2025)
 
 

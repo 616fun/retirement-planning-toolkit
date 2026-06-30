@@ -6,6 +6,12 @@ against the IRS and your state.** All bracket/threshold figures index forward fr
 the base year by the configured inflation rate.
 
 **Compiled:** June 2026 (base tax year 2026).
+**Last verified:** 2026-06-30 — federal brackets, standard deductions, and IRMAA
+MAGI floors (MFJ + single) confirmed against IRS Rev. Proc. 2025-32 and the CMS
+2026 IRMAA fact sheet (released 2025-11-14); LTCG breakpoints, IRMAA surcharge
+dollars, and the ACA FPL base were **corrected** in this pass (they were carrying
+stale 2024–2025 values). ✓ marks a figure confirmed against its primary source
+this cycle; ⚠ VERIFY marks one still to re-confirm next year.
 **Convention:** Every figure table carries a *Source* column and the tax year it
 applies to. Authorities: the **IRS** (federal brackets, standard deduction, RMD
 tables) and **CMS** (IRMAA). Statute is cited where a rule originates in an Act
@@ -70,18 +76,17 @@ inflation-adjusted figures.
 
 | Rate | Bracket top (taxable) | Applies to | Source |
 |---|---|---|---|
-| 10% | $24,800 | 2026 | IRS annual inflation adjustment ⚠ VERIFY |
-| 12% | $100,800 | 2026 | IRS annual inflation adjustment ⚠ VERIFY |
-| 22% | $211,400 | 2026 | IRS annual inflation adjustment ⚠ VERIFY |
-| 24% | $403,550 | 2026 | IRS annual inflation adjustment ⚠ VERIFY |
-| 32% | $512,450 | 2026 | IRS annual inflation adjustment ⚠ VERIFY |
-| 35% | $768,700 | 2026 | IRS annual inflation adjustment ⚠ VERIFY |
+| 10% | $24,800 | 2026 | Rev. Proc. 2025-32 ✓ |
+| 12% | $100,800 | 2026 | Rev. Proc. 2025-32 ✓ |
+| 22% | $211,400 | 2026 | Rev. Proc. 2025-32 ✓ |
+| 24% | $403,550 | 2026 | Rev. Proc. 2025-32 ✓ |
+| 32% | $512,450 | 2026 | Rev. Proc. 2025-32 ✓ |
+| 35% | $768,700 | 2026 | Rev. Proc. 2025-32 ✓ |
 | 37% | above | 2026 | rate permanent (OBBBA, P.L. 119-21) |
 
-- **Standard deduction (MFJ):** **$32,200** for 2026 (IRS annual inflation
-  adjustment; the increased base was set by OBBBA) — ⚠ VERIFY against the IRS
-  Rev. Proc. for the year. Config `assumptions.standard_deduction_mfj` is
-  authoritative at runtime.
+- **Standard deduction (MFJ):** **$32,200** for 2026 (IRS Rev. Proc. 2025-32;
+  the increased base was set by OBBBA) — ✓ verified 2026-06-30. Config
+  `assumptions.standard_deduction_mfj` is authoritative at runtime.
 - **Social Security:** modelled as **85% taxable** federally — the statutory cap
   (IRC §86) that applies to higher-income households. The engine does not model
   the lower 0%/50% inclusion tiers.
@@ -96,22 +101,23 @@ inflation-adjusted figures.
 The engine taxes a **one-member** household as **single** and a two-member
 household as **MFJ** (`tax_us.normalize_status`; the kernel passes the status
 through every tax call). All single figures below are the 2026 counterparts of
-the MFJ tables above and carry the same ⚠ VERIFY caveat.
+the MFJ tables above; ✓ = confirmed against Rev. Proc. 2025-32 / CMS 2026 on
+2026-06-30.
 
 | Item | Single value | Relationship to MFJ | Constant |
 |---|---|---|---|
-| 10% bracket top (taxable) | $12,400 | exactly ½ MFJ | `FEDERAL_BRACKETS_SINGLE` ⚠ VERIFY |
-| 12% bracket top | $50,400 | exactly ½ MFJ | ⚠ VERIFY |
-| 22% bracket top | $105,700 | exactly ½ MFJ | ⚠ VERIFY |
-| 24% bracket top | $201,775 | exactly ½ MFJ | ⚠ VERIFY |
-| 32% bracket top | $256,225 | exactly ½ MFJ | ⚠ VERIFY |
-| 35% bracket top | $640,600 | **not** ½ MFJ (single top is lower) | ⚠ VERIFY |
-| Standard deduction | $16,100 | exactly ½ MFJ | `STANDARD_DEDUCTION_SINGLE` ⚠ VERIFY |
-| IRMAA Tier 1–4 floors | $109k / $137k / $171k / $205k | exactly ½ MFJ | `IRMAA_SINGLE` ⚠ VERIFY |
-| IRMAA top floor | $500,000 | **not** ½ MFJ ($750k) | ⚠ VERIFY |
+| 10% bracket top (taxable) | $12,400 | exactly ½ MFJ | `FEDERAL_BRACKETS_SINGLE` ✓ |
+| 12% bracket top | $50,400 | exactly ½ MFJ | ✓ |
+| 22% bracket top | $105,700 | exactly ½ MFJ | ✓ |
+| 24% bracket top | $201,775 | exactly ½ MFJ | ✓ |
+| 32% bracket top | $256,225 | exactly ½ MFJ | ✓ |
+| 35% bracket top | $640,600 | **not** ½ MFJ (single top is lower) | ✓ |
+| Standard deduction | $16,100 | exactly ½ MFJ | `STANDARD_DEDUCTION_SINGLE` ✓ |
+| IRMAA Tier 1–4 floors | $109k / $137k / $171k / $205k | exactly ½ MFJ | `IRMAA_SINGLE` ✓ |
+| IRMAA top floor | $500,000 | **not** ½ MFJ ($750k) | ✓ |
 | IRMAA surcharge $/person | identical to MFJ | per-enrollee, status-independent | `IRMAA_SINGLE` |
 | SS §86 provisional bases | $25,000 / $34,000 | statutory, not indexed | `SS_PI_BASE1/2_SINGLE` |
-| LTCG 0% / 15% tops | $48,475 / $540,700 | 0% ≈ ½ MFJ; 15% not | `CAP_GAINS_BRACKETS_SINGLE` ⚠ VERIFY |
+| LTCG 0% / 15% tops | $49,450 / $545,500 | 0% ≈ ½ MFJ; 15% not | `CAP_GAINS_BRACKETS_SINGLE` ✓ |
 | NIIT threshold | $200,000 | statutory, not indexed | `NIIT_THRESHOLD_SINGLE` |
 | ACA FPL household size | 1 | drives the FPL ratio | `federal_poverty_level(1)` |
 
@@ -128,25 +134,31 @@ November release for the following year).
 
 | MAGI floor (MFJ) | Surcharge / person / yr | Applies to | Source |
 |---|---|---|---|
-| ≤ $218,000 | $0 | 2026 | CMS IRMAA release |
-| $218,000 | $1,143 | 2026 | CMS IRMAA release ⚠ VERIFY |
-| $274,000 | $2,867 | 2026 | CMS IRMAA release ⚠ VERIFY |
-| $342,000 | $4,587 | 2026 | CMS IRMAA release ⚠ VERIFY |
-| $410,000 | $6,306 | 2026 | CMS IRMAA release ⚠ VERIFY |
-| > $750,000 | $6,879 | 2026 | CMS IRMAA release ⚠ VERIFY |
+| ≤ $218,000 | $0 | 2026 | CMS 2026 IRMAA ✓ |
+| $218,000 | $1,148 | 2026 | CMS 2026 IRMAA ✓ |
+| $274,000 | $2,885 | 2026 | CMS 2026 IRMAA ✓ |
+| $342,000 | $4,620 | 2026 | CMS 2026 IRMAA ✓ |
+| $410,000 | $6,356 | 2026 | CMS 2026 IRMAA ✓ |
+| > $750,000 | $6,936 | 2026 | CMS 2026 IRMAA ✓ |
 
+- **Derivation (per person, annual = 12 × monthly add-ons):** Part B standard
+  premium $202.90; the statutory IRMAA multipliers (1.4 / 2.0 / 2.6 / 3.2 / 3.4)
+  give Part B add-ons of $81.20 / $202.90 / $324.64 / $446.38 / $486.96, and the
+  CMS 2026 Part D add-ons are $14.50 / $37.50 / $60.40 / $83.30 / $91.00. Tier-1
+  total $284.10/mo and tier-5 total $689.90/mo reconcile with the published CMS
+  premium range.
 - **2-year lookback:** the surcharge in a given year is set by MAGI from **two
   calendar years prior** (`IRMAA_LOOKBACK_YEARS = 2`), and only once a spouse is
   enrolled in Medicare at **65** (`MEDICARE_AGE`). The optimizer applies both.
 - The `$218,000` Tier-1 floor is the conversion ceiling the fill-to-bracket
   heuristic respects in the Medicare-lookback window.
 
-> ⚠ **VERIFY the surcharge dollars and tier floors each year.** The per-person
-> amounts above bundle the Part B and Part D add-ons; CMS publishes them
-> separately and they move every year with the Part B premium. The top tier
-> ($750k+) floor is fixed by statute and not indexed. Confirm against the CMS
-> release for the applicable year — IRMAA is the single most material cliff in a
-> conversion plan, so a stale figure here matters more than a stale bracket edge.
+> ⚠ **RE-VERIFY the surcharge dollars each year.** The 2026 figures above are
+> CMS-confirmed (fact sheet released 2025-11-14), but the per-person amounts move
+> every year with the Part B premium and the Part D add-ons. The top tier ($750k
+> MFJ / $500k single) floor is fixed by statute and not indexed. IRMAA is the
+> single most material cliff in a conversion plan, so a stale figure here matters
+> more than a stale bracket edge.
 
 ## RMDs — IRS Uniform Lifetime Table (2022+)
 
@@ -186,11 +198,11 @@ bands.
 
 | Item | Value (MFJ, 2026) | Source |
 |---|---|---|
-| LTCG 0% bracket top (taxable income) | $96,950 | IRS annual inflation adjustment ⚠ VERIFY |
-| LTCG 15% bracket top | $600,050 | IRS annual inflation adjustment ⚠ VERIFY |
+| LTCG 0% bracket top (taxable income) | $98,900 | Rev. Proc. 2025-32 ✓ (was stale $96,950) |
+| LTCG 15% bracket top | $613,700 | Rev. Proc. 2025-32 ✓ (was stale $600,050) |
 | LTCG 20% | above | statutory |
 | NIIT rate | 3.8% | IRC §1411 |
-| NIIT MAGI threshold | $250,000 | IRC §1411 — **not** inflation-indexed |
+| NIIT MAGI threshold (MFJ / single) | $250,000 / $200,000 | IRC §1411 — **not** inflation-indexed |
 
 - Cost basis comes from `accounts.taxable_cost_basis`, else an assumed
   `assumptions.taxable_unrealized_gain_pct` (default 50%). The 0% LTCG bracket is
@@ -208,8 +220,8 @@ credits expire at the end of 2025; set it true for the 8.5%-cap, no-cliff regime
 
 | Item | Value | Source |
 |---|---|---|
-| Federal Poverty Level, 1 person | $15,060 | HHS 2025 FPL guidelines ⚠ VERIFY |
-| FPL per additional person | $5,380 | HHS 2025 ⚠ VERIFY |
+| Federal Poverty Level, 1 person | $15,650 | HHS 2025 guidelines ✓ (was stale 2024 $15,060) |
+| FPL per additional person | $5,500 | HHS 2025 ✓ (was stale 2024 $5,380) |
 | Subsidy cliff (current law) | 400% FPL | ACA / IRC §36B |
 | Applicable-% schedule | ~2.0%→9.83% (current law) / 0%→8.5% (enhanced) | IRS Rev. Proc. (annual) ⚠ VERIFY |
 
@@ -268,7 +280,7 @@ shipped here.
 
 | Topic | Primary source |
 |---|---|
-| Federal brackets + standard deduction (annual $ figures) | IRS annual inflation-adjustment Revenue Procedure — <https://www.irs.gov/newsroom> (search "inflation adjustments" for the tax year) |
+| Federal brackets + standard deduction (annual $ figures) | IRS Rev. Proc. 2025-32 (2026) — <https://www.irs.gov/pub/irs-drop/rp-25-32.pdf>; news summary <https://www.irs.gov/newsroom/irs-releases-tax-inflation-adjustments-for-tax-year-2026-including-amendments-from-the-one-big-beautiful-bill> |
 | Bracket-rate permanence | One Big Beautiful Bill Act (OBBBA), P.L. 119-21 (2025) |
 | Taxation of Social Security benefits (≤85%) | IRC §86; IRS Pub. 915 — <https://www.irs.gov/pub/irs-pdf/p915.pdf> |
 | IRMAA tiers + Part B/D surcharges | CMS annual Medicare Part B/D premium release — <https://www.cms.gov/newsroom> (and Medicare.gov IRMAA pages) |
@@ -282,6 +294,14 @@ shipped here.
 | Federal Poverty Level guidelines | HHS ASPE poverty guidelines — <https://aspe.hhs.gov/poverty-guidelines> |
 | Enhanced-subsidy expiration (post-2025 cliff) | ARPA 2021 / IRA 2022 sunset — verify current legislative status |
 
-**⚠ VERIFY** tags above mark figures that are released annually and most warrant
-an independent check: the IRMAA surcharge dollars and tier floors, and the
-federal bracket edges + standard deduction for the run year.
+**Verification log:**
+- **2026-06-30** — full pass against Rev. Proc. 2025-32 and the CMS 2026 IRMAA
+  fact sheet. Confirmed (✓): federal brackets + standard deduction (MFJ + single),
+  IRMAA MAGI floors (MFJ + single). Corrected stale values: LTCG breakpoints
+  (MFJ $96,950/$600,050 → $98,900/$613,700; single $48,475/$540,700 →
+  $49,450/$545,500), IRMAA surcharge dollars (→ $1,148/$2,885/$4,620/$6,356/$6,936
+  per person/yr), ACA FPL base (2024 $15,060/$5,380 → 2025 $15,650/$5,500).
+
+**Re-verify next cycle:** the IRMAA surcharge dollars (move yearly with the Part B
+premium), the federal bracket edges + standard deduction, the LTCG breakpoints,
+and the FPL table + ACA applicable-% schedule — all released annually.
