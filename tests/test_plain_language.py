@@ -96,6 +96,14 @@ def test_full_report_exposes_the_evidence():
         assert k in r["assumptions"]
 
 
+def test_full_report_includes_ss_claiming():
+    ss = pl.full_report(_cfg())["ss_claiming"]
+    assert 62 <= ss["recommended"]["you"] <= 70
+    assert ss["extra_vs_configured"] >= 0          # never worse than configured
+    assert ss["fra"]["you"] == 67.0
+    assert ss["grid"]                              # the trust-but-verify grid
+
+
 def test_full_report_monte_carlo_three_regimes():
     mc = pl.full_report(_cfg())["monte_carlo"]
     sc = mc["scenarios"]
