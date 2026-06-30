@@ -84,6 +84,8 @@
     ]
   },
 
+  "_withdrawal_order_comment": "Optional. Decumulation order across the three tax buckets when spending exceeds income. Default ['taxable','pretax','roth'] lets the tax-advantaged pools compound longest. Reorder to e.g. ['pretax','taxable','roth'] to draw pre-tax first (smaller RMDs / estate later), or put 'roth' last to preserve the tax-free pool. Any omitted bucket is appended automatically. Omit the key for the default.",
+
   "assumptions": {
     "_comment": "taxable_unrealized_gain_pct = embedded-gain share of the taxable pool (drives capital gains on draws); override per-account with accounts.taxable_cost_basis. aca_enhanced_subsidies=false models the current-law 400% FPL cliff returning post-2025; set true for the ARPA/IRA 8.5% cap with no cliff.",
     "portfolio_return_base": 0.075,

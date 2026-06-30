@@ -94,6 +94,21 @@ def real_estate_total(cfg):
                      if isinstance(v, (int, float))))
 
 
+# The three tax buckets, in the default decumulation order (taxable first lets
+# the tax-advantaged pools keep compounding; Roth last preserves the tax-free
+# pool longest). cfg["withdrawal_order"] may reorder them.
+WITHDRAWAL_BUCKETS = ("taxable", "pretax", "roth")
+
+
+def withdrawal_order(cfg):
+    """Resolve the decumulation bucket order from config, defaulting to
+    taxable -> pre-tax -> Roth. Unknown names are ignored and any of the three
+    buckets the config omits are appended (so no money is ever stranded)."""
+    requested = cfg.get("withdrawal_order") or list(WITHDRAWAL_BUCKETS)
+    ordered = [b for b in requested if b in WITHDRAWAL_BUCKETS]
+    return ordered + [b for b in WITHDRAWAL_BUCKETS if b not in ordered]
+
+
 # ---- spending model: the retirement "smile" + lumpy one-time expenses ------
 
 def spending_multiplier(cfg, age):
@@ -222,7 +237,13 @@ def simulate(cfg, *, returns=None, strategy="none", target=None, horizon=None,
     trace_out = [] if trace else None        # net worth per year (for the MC band)
     magi_history = {}                        # year_index -> MAGI, for IRMAA lookback
 
-    # Draw `amount` from taxable -> pre-tax -> Roth, realizing proportional
+    # Decumulation order across the three tax buckets. Default taxable ->
+    # pre-tax -> Roth (the conventional "let Roth compound longest" sequence);
+    # cfg["withdrawal_order"] overrides it. Any bucket the config omits is
+    # appended so the plan can always reach every dollar.
+    draw_order = withdrawal_order(cfg)
+
+    # Draw `amount` across the pools in `draw_order`, realizing proportional
     # capital gains on the taxable slice and amortizing basis. Mutates the pools
     # and the per-year draw/gain accumulators in place.
     draw_taxable = draw_trad = draw_roth = realized_gain = 0.0
@@ -233,16 +254,19 @@ def simulate(cfg, *, returns=None, strategy="none", target=None, horizon=None,
         short = amount
         if short <= 0:
             return
-        if taxable > 0:
-            take = min(taxable, short)
-            gfrac = max(0.0, (taxable - taxable_basis) / taxable)
-            realized_gain += take * gfrac
-            taxable_basis -= take * (1.0 - gfrac)
-            taxable -= take; short -= take; draw_taxable += take
-        if short > 0:
-            take = min(trad, short); trad -= take; short -= take; draw_trad += take
-        if short > 0:
-            take = min(roth, short); roth -= take; short -= take; draw_roth += take
+        for bucket in draw_order:
+            if short <= 0:
+                break
+            if bucket == "taxable" and taxable > 0:
+                take = min(taxable, short)
+                gfrac = max(0.0, (taxable - taxable_basis) / taxable)
+                realized_gain += take * gfrac
+                taxable_basis -= take * (1.0 - gfrac)
+                taxable -= take; short -= take; draw_taxable += take
+            elif bucket == "pretax" and trad > 0:
+                take = min(trad, short); trad -= take; short -= take; draw_trad += take
+            elif bucket == "roth" and roth > 0:
+                take = min(roth, short); roth -= take; short -= take; draw_roth += take
         if short > 1.0:
             insolvent = True
 
