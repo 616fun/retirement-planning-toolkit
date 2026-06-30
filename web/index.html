@@ -187,11 +187,14 @@ function buildConfig(){
   const retA = num("retireA"), retB = couple ? num("retireB") : num("retireA");
   const ssA = num("ssAgeA"), ssB = couple ? num("ssAgeB") : num("ssAgeA");
   return {
-    household: { name:"My Household", filing_status:"MFJ", state:"--",
+    household: { name:"My Household", filing_status: couple?"MFJ":"single", state:"--",
       state_income_tax_rate: num("stateRate")/100, local_income_tax_rate: 0,
-      members: [
+      // One member -> the engine taxes the plan as single; two -> MFJ.
+      members: couple ? [
         { id:"spouse_a", display_name:"You", birth_year: yr-ageA, retirement_age: retA, ss_claim_age: ssA },
-        { id:"spouse_b", display_name: couple?"Spouse":"(none)", birth_year: yr-ageB, retirement_age: retB, ss_claim_age: ssB }
+        { id:"spouse_b", display_name:"Spouse", birth_year: yr-ageB, retirement_age: retB, ss_claim_age: ssB }
+      ] : [
+        { id:"spouse_a", display_name:"You", birth_year: yr-ageA, retirement_age: retA, ss_claim_age: ssA }
       ]},
     employer_stock: { employer_name:"(none)", ticker:"NONE", sec_identity:"", major_holder_flag_name:null,
       watch_threshold_pct:5, trim_threshold_pct:7,

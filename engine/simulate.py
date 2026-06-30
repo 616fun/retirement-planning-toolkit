@@ -162,17 +162,33 @@ def simulate(cfg, *, returns=None, strategy="none", target=None, horizon=None,
     m = cfg["household"]["members"]
     inc = cfg["income"]
 
+    # Filing status flows from household size: 1 member -> single, 2 -> MFJ.
+    single = len(m) == 1
+    status = "single" if single else "mfj"
+
     infl = a["inflation_rate"]
     base_ret = a["portfolio_return_base"]
-    std0 = a.get("standard_deduction_mfj", tax_us.STANDARD_DEDUCTION_MFJ)
+    # Standard deduction: an explicit `standard_deduction` override wins; else the
+    # MFJ config key (for a couple) or the status default (for a single filer).
+    std0 = a.get("standard_deduction")
+    if std0 is None:
+        std0 = a.get("standard_deduction_mfj") if not single else None
+    if std0 is None:
+        std0 = tax_us.standard_deduction(status)
     spend0 = a["retirement_spend_annual"]
     base_year = datetime.date.today().year
 
-    a_age0, b_age0 = current_age(cfg, "spouse_a"), current_age(cfg, "spouse_b")
+    a_age0 = current_age(cfg, "spouse_a")
     a_ret = m[0]["retirement_age"]
-    b_ret = m[1]["retirement_age"]
-    a_ss, b_ss = m[0]["ss_claim_age"], m[1]["ss_claim_age"]
+    a_ss = m[0]["ss_claim_age"]
     a_rmd_start = rmd_start_age(m[0]["birth_year"])
+    # Spouse B drivers are neutral for a single household (no second income, SS,
+    # or Medicare enrollee); b_age tracks spouse A only as an unused ledger column.
+    if single:
+        b_age0, b_ret, b_ss = a_age0, 0, 999
+    else:
+        b_age0 = current_age(cfg, "spouse_b")
+        b_ret, b_ss = m[1]["retirement_age"], m[1]["ss_claim_age"]
 
     trad = pretax_total(cfg)
     roth = roth_total(cfg)
@@ -190,14 +206,14 @@ def simulate(cfg, *, returns=None, strategy="none", target=None, horizon=None,
     # unless a benchmark premium is configured under cfg["healthcare"].
     hc = cfg.get("healthcare", {})
     aca_benchmark0 = float(hc.get("aca_benchmark_premium_annual", 0) or 0)
-    aca_hh_size = int(hc.get("aca_household_size", 2) or 2)
+    aca_hh_size = int(hc.get("aca_household_size", 1 if single else 2) or (1 if single else 2))
     aca_enhanced = bool(a.get("aca_enhanced_subsidies", False))
 
     pension_m, cola = inc["pension_monthly_at_retirement"], inc["pension_cola"]
     passive0 = inc["passive_income_annual"]
-    b_salary0 = inc["spouse_b_annual"]
+    b_salary0 = 0.0 if single else inc["spouse_b_annual"]
     ss_a0 = cfg["social_security"]["spouse_a_monthly_benefit"] * 12
-    ss_b0 = cfg["social_security"]["spouse_b_monthly_benefit"] * 12
+    ss_b0 = 0.0 if single else cfg["social_security"]["spouse_b_monthly_benefit"] * 12
 
     if horizon is None:
         horizon = max(1, 90 - a_age0)
@@ -262,14 +278,14 @@ def simulate(cfg, *, returns=None, strategy="none", target=None, horizon=None,
         non_ss = pension + passive + b_work + forced     # non-SS ordinary income
 
         # ---- choose the conversion amount (fills ordinary income to a ceiling) ----
-        irmaa_ceiling = tax_us.irmaa_tier1_magi(year, infl)
+        irmaa_ceiling = tax_us.irmaa_tier1_magi(year, infl, status=status)
         if strategy == "none":
             conversion = 0.0
         elif strategy == "bracket":
-            bracket_top_taxable = tax_us.FEDERAL_BRACKETS_MFJ[2][1] * idx
+            bracket_top_taxable = tax_us.FEDERAL_BRACKETS[status][2][1] * idx
             ceiling_agi = bracket_top_taxable + std
             if (a_age >= tax_us.MEDICARE_AGE - tax_us.IRMAA_LOOKBACK_YEARS
-                    or b_age >= tax_us.MEDICARE_AGE - tax_us.IRMAA_LOOKBACK_YEARS):
+                    or (not single and b_age >= tax_us.MEDICARE_AGE - tax_us.IRMAA_LOOKBACK_YEARS)):
                 ceiling_agi = min(ceiling_agi, irmaa_ceiling)
             conversion = max(0.0, min(ceiling_agi - non_ss, trad - forced))
         else:  # optimal -- fill to a level real target (today's $ AGI)
@@ -281,17 +297,17 @@ def simulate(cfg, *, returns=None, strategy="none", target=None, horizon=None,
 
         # ---- Social Security taxed via provisional income (IRC sec. 86) ----
         non_ss_ord = non_ss + conversion
-        ss_taxable = tax_us.ss_taxable_amount(ss_total, non_ss_ord)
+        ss_taxable = tax_us.ss_taxable_amount(ss_total, non_ss_ord, status=status)
         ordinary_agi = non_ss_ord + ss_taxable
         ordinary_taxable = max(0.0, ordinary_agi - std)
 
         # ---- ordinary income tax (fed + state) + the 2-yr-lookback IRMAA ----
         n_medicare = (1 if a_age >= tax_us.MEDICARE_AGE else 0) + \
-                     (1 if b_age >= tax_us.MEDICARE_AGE else 0)
-        fed = tax_us.federal_tax(ordinary_agi, year, infl, std0)
+                     (0 if single else (1 if b_age >= tax_us.MEDICARE_AGE else 0))
+        fed = tax_us.federal_tax(ordinary_agi, year, infl, std0, status=status)
         st = tax_us.state_tax(ordinary_agi, cfg, year, infl, ss_income=ss_taxable)
         magi_look = magi_history.get(n - tax_us.IRMAA_LOOKBACK_YEARS, ordinary_agi)
-        irmaa = tax_us.irmaa_annual(magi_look, year, infl, n_enrolled=n_medicare)
+        irmaa = tax_us.irmaa_annual(magi_look, year, infl, n_enrolled=n_medicare, status=status)
 
         # ---- fund spending; realize capital gains on the taxable draws ----
         draw_taxable = draw_trad = draw_roth = realized_gain = 0.0
@@ -303,9 +319,9 @@ def simulate(cfg, *, returns=None, strategy="none", target=None, horizon=None,
         else:
             _pull(spend - net)
         # capital-gains + NIIT on the gains realized while funding the shortfall
-        cg_tax = tax_us.capital_gains_tax(ordinary_taxable, realized_gain, year, infl)
+        cg_tax = tax_us.capital_gains_tax(ordinary_taxable, realized_gain, year, infl, status=status)
         magi = ordinary_agi + realized_gain
-        niit_tax = tax_us.niit(realized_gain, magi)
+        niit_tax = tax_us.niit(realized_gain, magi, status=status)
         if cg_tax + niit_tax > 0:
             _pull(cg_tax + niit_tax)        # 2nd-pass draw to cover investment tax
         year_tax = fed + st + irmaa + cg_tax + niit_tax

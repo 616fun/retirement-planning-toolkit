@@ -77,12 +77,22 @@ def test_validate_can_be_disabled():
     assert cfg["household"]["name"]
 
 
-def test_validate_rejects_one_member():
+def test_validate_accepts_one_member_single():
+    # A single (one-member) household is valid and does NOT require the
+    # spouse-B income/benefit keys.
     cfg = _good()
     cfg["household"]["members"] = cfg["household"]["members"][:1]
+    del cfg["income"]["spouse_b_annual"]
+    del cfg["social_security"]["spouse_b_monthly_benefit"]
+    assert cl.validate_config(cfg) is not None
+
+
+def test_validate_rejects_zero_members():
+    cfg = _good()
+    cfg["household"]["members"] = []
     with pytest.raises(cl.ConfigError) as e:
         cl.validate_config(cfg)
-    assert "exactly 2 members" in str(e.value)
+    assert "1 or 2 members" in str(e.value)
 
 
 def test_validate_rejects_three_members():
