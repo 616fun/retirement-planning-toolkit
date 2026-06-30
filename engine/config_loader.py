@@ -79,43 +79,76 @@ _REQUIRED = {
 _MEMBER_KEYS = ["id", "display_name", "birth_year", "retirement_age", "ss_claim_age"]
 
 
-# Required keys that describe a second spouse -- not required for a single
-# (one-member) household. Dropped from validation when len(members) == 1.
+# Required keys that describe a second spouse -- not required for a one-earner
+# (single or head-of-household) household.
 _SPOUSE_B_KEYS = {"income": ["spouse_b_annual"],
                   "social_security": ["spouse_b_monthly_benefit"]}
+
+# Accepted household.filing_status tokens -> normalized status.
+_FILING_STATUS = {
+    "mfj": "mfj", "married": "mfj", "married_filing_jointly": "mfj",
+    "single": "single", "s": "single", "individual": "single",
+    "hoh": "hoh", "head_of_household": "hoh", "head-of-household": "hoh",
+    "headofhousehold": "hoh",
+}
+# Earner members carry retirement/SS ages; dependents (extra members) need only
+# identity + birth year (they add to household size, not income).
+_DEPENDENT_MEMBER_KEYS = ["id", "display_name", "birth_year"]
+
+
+def _resolve_status(members, declared):
+    """Local copy of the filing-status rule (avoids importing tax_us here)."""
+    if declared is not None:
+        return _FILING_STATUS.get(str(declared).strip().lower())  # None if invalid
+    n = len(members) if isinstance(members, list) else 0
+    return "mfj" if n >= 2 else "single"
 
 
 def validate_config(cfg):
     """Validate config shape; raise ConfigError listing every problem at once.
 
-    The household may have 1 member (taxed as single) or 2 (taxed as MFJ). For a
-    single household the spouse-B income/benefit keys are not required.
+    Filing status is read from household.filing_status (single / mfj / hoh) or
+    inferred from the member count. A one-earner household (single or HOH) does
+    not require the spouse-B keys; extra members beyond the earner(s) are treated
+    as dependents and need only id / display_name / birth_year.
     """
     errors = []
     members = cfg.get("household", {}).get("members")
-    single = isinstance(members, list) and len(members) == 1
+    declared = cfg.get("household", {}).get("filing_status")
+    status = _resolve_status(members, declared)
+    if declared is not None and status is None:
+        errors.append(
+            f"household.filing_status must be one of 'single', 'mfj', 'hoh' "
+            f"(got {declared!r}).")
+        status = "mfj"   # assume the common case so the rest can still validate
+    one_earner = status != "mfj"
+    n_earners = 1 if one_earner else 2
+
     for section, keys in _REQUIRED.items():
         sec = cfg.get(section)
         if not isinstance(sec, dict):
             errors.append(f"missing or invalid section '{section}' (must be an object)")
             continue
-        skip = set(_SPOUSE_B_KEYS.get(section, [])) if single else set()
+        skip = set(_SPOUSE_B_KEYS.get(section, [])) if one_earner else set()
         for k in keys:
             if k not in sec and k not in skip:
                 errors.append(f"{section}.{k} is required")
 
-    # The toolkit models 1 (single) or 2 (married filing jointly) members.
-    if not isinstance(members, list) or len(members) not in (1, 2):
-        n = len(members) if isinstance(members, list) else "none"
-        errors.append(
-            f"household.members must be a list of 1 or 2 members -- one member is "
-            f"taxed as single, two as married-filing-jointly (got {n}).")
+    # 1+ members; MFJ needs at least 2 (the two earners). Additional members are
+    # dependents and only affect household size.
+    n = len(members) if isinstance(members, list) else 0
+    if not isinstance(members, list) or n < 1:
+        errors.append("household.members must be a non-empty list (got "
+                      + (str(n) if isinstance(members, list) else "none") + ").")
+    elif status == "mfj" and n < 2:
+        errors.append("filing_status 'mfj' requires 2 earner members (got 1).")
     elif not errors:  # only dig into members if the section structure is sound
         for i, m in enumerate(members):
             if not isinstance(m, dict):
                 errors.append(f"household.members[{i}] must be an object")
                 continue
-            for k in _MEMBER_KEYS:
+            required = _MEMBER_KEYS if i < n_earners else _DEPENDENT_MEMBER_KEYS
+            for k in required:
                 if k not in m:
                     errors.append(f"household.members[{i}].{k} is required")
                 elif k not in ("id", "display_name") and not _is_number(m[k]):

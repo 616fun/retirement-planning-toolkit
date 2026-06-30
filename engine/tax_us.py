@@ -56,8 +56,20 @@ FEDERAL_BRACKETS_SINGLE = [
     (0.35, 640600),
     (0.37, None),
 ]
+# HEAD OF HOUSEHOLD 2026 (Rev. Proc. 2025-32, verified 2026-06-30). Sits between
+# single and MFJ in the low brackets; the 22%+ edges coincide with single.
+FEDERAL_BRACKETS_HOH = [
+    (0.10, 17700),
+    (0.12, 67450),
+    (0.22, 105700),
+    (0.24, 201775),
+    (0.32, 256200),
+    (0.35, 640600),
+    (0.37, None),
+]
 STANDARD_DEDUCTION_MFJ = 32200          # 2026 OBBBA (config can override)
 STANDARD_DEDUCTION_SINGLE = 16100       # 2026 OBBBA -- half of MFJ (config can override)
+STANDARD_DEDUCTION_HOH = 24150          # 2026 Rev. Proc. 2025-32
 SS_TAXABLE_FRACTION = 0.85              # share of Social Security taxed federally
 
 # IRMAA 2026 MFJ cascade: (MAGI floor, ANNUAL surcharge PER PERSON, Part B + D).
@@ -90,23 +102,44 @@ MEDICARE_AGE = 65
 IRMAA_LOOKBACK_YEARS = 2
 
 # Filing-status selector tables. Default everywhere is "mfj" (backward
-# compatible); the kernel passes "single" for a one-member household.
-FEDERAL_BRACKETS = {"mfj": FEDERAL_BRACKETS_MFJ, "single": FEDERAL_BRACKETS_SINGLE}
-_STD_DEDUCTION = {"mfj": STANDARD_DEDUCTION_MFJ, "single": STANDARD_DEDUCTION_SINGLE}
-_IRMAA = {"mfj": IRMAA_MFJ, "single": IRMAA_SINGLE}
+# compatible); the kernel passes "single" or "hoh" for a one-earner household.
+# Head of household has its own ordinary brackets, standard deduction, and LTCG
+# breakpoints, but shares the single/unmarried amounts for IRMAA floors, the SS
+# §86 provisional bases, and the NIIT threshold (the IRS does not give HOH a
+# separate tier for those).
+FEDERAL_BRACKETS = {"mfj": FEDERAL_BRACKETS_MFJ, "single": FEDERAL_BRACKETS_SINGLE,
+                    "hoh": FEDERAL_BRACKETS_HOH}
+_STD_DEDUCTION = {"mfj": STANDARD_DEDUCTION_MFJ, "single": STANDARD_DEDUCTION_SINGLE,
+                  "hoh": STANDARD_DEDUCTION_HOH}
+_IRMAA = {"mfj": IRMAA_MFJ, "single": IRMAA_SINGLE, "hoh": IRMAA_SINGLE}
 
 
 def normalize_status(status):
-    """Map a free-form filing-status string to 'mfj' or 'single' (default mfj)."""
+    """Map a free-form filing-status string to 'mfj', 'single', or 'hoh'
+    (default mfj)."""
     s = str(status or "mfj").strip().lower()
     if s in ("single", "s", "individual", "just_me", "1"):
         return "single"
+    if s in ("hoh", "head_of_household", "head-of-household", "headofhousehold"):
+        return "hoh"
     return "mfj"
 
 
 def standard_deduction(status="mfj"):
     """Default standard deduction for a filing status (config may override)."""
     return _STD_DEDUCTION[normalize_status(status)]
+
+
+def resolve_filing_status(cfg):
+    """Filing status for a household: an explicit household.filing_status wins
+    (normalized to 'mfj'/'single'/'hoh'); otherwise inferred from the member
+    count (>=2 -> mfj, else single)."""
+    hh = cfg.get("household", {})
+    declared = hh.get("filing_status")
+    if declared:
+        return normalize_status(declared)
+    members = hh.get("members") or []
+    return "mfj" if len(members) >= 2 else "single"
 
 # Terminal (estate) assumption: pre-tax dollars left to heirs are drawn down
 # under the SECURE Act 10-year rule and taxed at the heirs' marginal rate. Sons
@@ -238,7 +271,8 @@ SS_PI_BASE2_MFJ = 44000.0
 SS_PI_BASE1_SINGLE = 25000.0
 SS_PI_BASE2_SINGLE = 34000.0
 _SS_PI = {"mfj": (SS_PI_BASE1_MFJ, SS_PI_BASE2_MFJ),
-          "single": (SS_PI_BASE1_SINGLE, SS_PI_BASE2_SINGLE)}
+          "single": (SS_PI_BASE1_SINGLE, SS_PI_BASE2_SINGLE),
+          "hoh": (SS_PI_BASE1_SINGLE, SS_PI_BASE2_SINGLE)}
 
 
 def ss_taxable_amount(ss_total, other_income, status="mfj"):
@@ -265,7 +299,9 @@ def ss_taxable_amount(ss_total, other_income, status="mfj"):
 # breakpoints where the gain starts being taxed at 15% / 20%).
 CAP_GAINS_BRACKETS_MFJ = [(0.0, 98900), (0.15, 613700), (0.20, None)]
 CAP_GAINS_BRACKETS_SINGLE = [(0.0, 49450), (0.15, 545500), (0.20, None)]
-_CAP_GAINS = {"mfj": CAP_GAINS_BRACKETS_MFJ, "single": CAP_GAINS_BRACKETS_SINGLE}
+CAP_GAINS_BRACKETS_HOH = [(0.0, 66200), (0.15, 579600), (0.20, None)]  # 2026 Rev. Proc. 2025-32
+_CAP_GAINS = {"mfj": CAP_GAINS_BRACKETS_MFJ, "single": CAP_GAINS_BRACKETS_SINGLE,
+              "hoh": CAP_GAINS_BRACKETS_HOH}
 
 
 def capital_gains_tax(ordinary_taxable, gain, year=BASE_YEAR, infl=0.02, status="mfj"):
@@ -290,8 +326,9 @@ def capital_gains_tax(ordinary_taxable, gain, year=BASE_YEAR, infl=0.02, status=
 # ---- Net Investment Income Tax (NIIT) -------------------------------------
 NIIT_RATE = 0.038
 NIIT_THRESHOLD_MFJ = 250000.0     # statutory, NOT inflation-indexed
-NIIT_THRESHOLD_SINGLE = 200000.0  # statutory, NOT inflation-indexed
-_NIIT_THRESHOLD = {"mfj": NIIT_THRESHOLD_MFJ, "single": NIIT_THRESHOLD_SINGLE}
+NIIT_THRESHOLD_SINGLE = 200000.0  # statutory, NOT inflation-indexed (single + HOH)
+_NIIT_THRESHOLD = {"mfj": NIIT_THRESHOLD_MFJ, "single": NIIT_THRESHOLD_SINGLE,
+                   "hoh": NIIT_THRESHOLD_SINGLE}
 
 
 def niit(net_investment_income, magi, status="mfj"):

@@ -67,6 +67,7 @@ def test_single_taxes_more_than_mfj_at_equal_income():
     mfj = sim.simulate(copy.deepcopy(base), strategy="none")
 
     single = copy.deepcopy(base)
+    single["household"]["filing_status"] = "single"
     single["household"]["members"] = single["household"]["members"][:1]
     del single["income"]["spouse_b_annual"]
     del single["social_security"]["spouse_b_monthly_benefit"]
@@ -74,6 +75,30 @@ def test_single_taxes_more_than_mfj_at_equal_income():
 
     # Tighter single brackets + smaller standard deduction -> strictly more tax.
     assert single_run["lifetime_tax"] > mfj["lifetime_tax"]
+
+
+def test_hoh_pays_less_than_single_same_household():
+    # Head of household is strictly more favorable than single (wider low
+    # brackets + larger standard deduction), holding income fixed.
+    base = _single_cfg()                       # avery, filing_status "single"
+    single = sim.simulate(copy.deepcopy(base), strategy="none")
+    hoh_cfg = copy.deepcopy(base)
+    hoh_cfg["household"]["filing_status"] = "hoh"
+    hoh = sim.simulate(hoh_cfg, strategy="none")
+    assert hoh["lifetime_tax"] < single["lifetime_tax"]
+
+
+def test_dependent_member_runs_and_lifts_household_size():
+    # A single parent (HOH) with a dependent listed as a third-party member:
+    # the engine runs, taxes as HOH, and the dependent does not add income.
+    cfg = _single_cfg()
+    cfg["household"]["filing_status"] = "hoh"
+    cfg["household"]["members"].append(
+        {"id": "dependent_1", "display_name": "Kid", "birth_year": 2014})
+    r = sim.simulate(cfg, strategy="none")
+    assert r["ledger"] and r["ledger"][-1]["a_age"] == 90
+    # The dependent earns nothing: no second wage stream appears.
+    assert all(row["wages"] == 0 for row in r["ledger"])
 
 
 def test_single_household_has_one_medicare_enrollee_max():

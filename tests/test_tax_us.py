@@ -228,6 +228,49 @@ def test_single_ltcg_zero_bracket_is_smaller():
     assert tax_us.capital_gains_tax(0, 60000, status="single") > 0.0
 
 
+# ---- head of household ----------------------------------------------------
+def test_normalize_status_hoh():
+    assert tax_us.normalize_status("hoh") == "hoh"
+    assert tax_us.normalize_status("head_of_household") == "hoh"
+    assert tax_us.normalize_status("Head-of-Household") == "hoh"
+    assert tax_us.standard_deduction("hoh") == 24150
+
+
+def test_hoh_federal_sits_between_mfj_and_single():
+    # More favorable than single, less than MFJ, at a middling income.
+    for agi in (90000, 120000, 180000):
+        mfj = tax_us.federal_tax(agi)
+        hoh = tax_us.federal_tax(agi, status="hoh")
+        single = tax_us.federal_tax(agi, status="single")
+        assert mfj < hoh < single
+
+
+def test_hoh_shares_single_irmaa_ss_niit():
+    # HOH has no separate IRMAA / SS §86 / NIIT tier -- it uses the single amounts.
+    assert tax_us.irmaa_annual(120000, n_enrolled=1, status="hoh") == \
+        tax_us.irmaa_annual(120000, n_enrolled=1, status="single")
+    assert tax_us.ss_taxable_amount(40000, 30000, status="hoh") == \
+        tax_us.ss_taxable_amount(40000, 30000, status="single")
+    assert tax_us.niit(50000, 220000, status="hoh") == \
+        tax_us.niit(50000, 220000, status="single")
+
+
+def test_hoh_has_its_own_ltcg_breakpoints():
+    # A $60k gain on no ordinary income: 0% for HOH (top $66,200) but taxed for
+    # single (top $49,450).
+    assert tax_us.capital_gains_tax(0, 60000, status="hoh") == 0.0
+    assert tax_us.capital_gains_tax(0, 60000, status="single") > 0.0
+    assert [e for _, e in tax_us.CAP_GAINS_BRACKETS_HOH] == [66200, 579600, None]
+
+
+def test_resolve_filing_status():
+    mk = lambda n, fs=None: {"household": {"members": [{}] * n, **({"filing_status": fs} if fs else {})}}
+    assert tax_us.resolve_filing_status(mk(2)) == "mfj"       # inferred
+    assert tax_us.resolve_filing_status(mk(1)) == "single"    # inferred
+    assert tax_us.resolve_filing_status(mk(1, "hoh")) == "hoh"          # declared wins
+    assert tax_us.resolve_filing_status(mk(2, "single")) == "single"    # declared wins
+
+
 # ---- verified 2026 constants (drift guard for the annual re-verification) --
 # These lock the figures confirmed/corrected on 2026-06-30 against Rev. Proc.
 # 2025-32 and the CMS 2026 IRMAA fact sheet (see docs/US_RULES.md verification

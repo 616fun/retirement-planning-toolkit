@@ -86,7 +86,11 @@
         <div class="seg" id="couple">
           <button type="button" data-v="1" class="on">Me &amp; my spouse</button>
           <button type="button" data-v="0">Just me</button>
+          <button type="button" data-v="2">Head of household</button>
         </div>
+      </div>
+      <div class="row">
+        <div class="field hohOnly hidden"><label>Dependents in your household <span class="hint">(sets ACA household size)</span></label><input type="number" id="dependents" value="1" min="1" max="10"></div>
       </div>
       <div class="row">
         <div class="field"><label>Your age</label><input type="number" id="ageA" value="55" min="18" max="90"></div>
@@ -167,7 +171,7 @@
 <script src="https://cdn.jsdelivr.net/npm/chart.js@4.4.1/dist/chart.umd.min.js"></script>
 <script>
 const ENGINE_FILES = ["config_loader.py", "tax_us.py", "simulate.py", "plain_language.py"];
-let pyodide = null, couple = 1;
+let pyodide = null, couple = true, filingStatus = "MFJ";
 
 function esc(s){ const d=document.createElement("div"); d.textContent=s; return d.innerHTML; }
 function num(id){ return parseFloat(document.getElementById(id).value) || 0; }
@@ -175,9 +179,12 @@ function num(id){ return parseFloat(document.getElementById(id).value) || 0; }
 // --- couple / single toggle ---
 document.getElementById("couple").addEventListener("click", e => {
   const b = e.target.closest("button"); if(!b) return;
-  couple = +b.dataset.v;
+  const v = +b.dataset.v;
+  couple = v === 1;
+  filingStatus = v === 1 ? "MFJ" : v === 2 ? "hoh" : "single";
   document.querySelectorAll("#couple button").forEach(x => x.classList.toggle("on", x===b));
   document.querySelectorAll(".spouseOnly").forEach(x => x.classList.toggle("hidden", !couple));
+  document.querySelectorAll(".hohOnly").forEach(x => x.classList.toggle("hidden", v !== 2));
 });
 
 // --- build the engine config from plain answers (defaults for everything else) ---
@@ -187,9 +194,9 @@ function buildConfig(){
   const retA = num("retireA"), retB = couple ? num("retireB") : num("retireA");
   const ssA = num("ssAgeA"), ssB = couple ? num("ssAgeB") : num("ssAgeA");
   return {
-    household: { name:"My Household", filing_status: couple?"MFJ":"single", state:"--",
+    household: { name:"My Household", filing_status: filingStatus, state:"--",
       state_income_tax_rate: num("stateRate")/100, local_income_tax_rate: 0,
-      // One member -> the engine taxes the plan as single; two -> MFJ.
+      // One member -> single or head of household; two -> MFJ.
       members: couple ? [
         { id:"spouse_a", display_name:"You", birth_year: yr-ageA, retirement_age: retA, ss_claim_age: ssA },
         { id:"spouse_b", display_name:"Spouse", birth_year: yr-ageB, retirement_age: retB, ss_claim_age: ssB }
@@ -207,7 +214,7 @@ function buildConfig(){
     income: { spouse_a_salary:0, spouse_a_bonus_pct:0, spouse_a_rsu_annual:0, spouse_b_annual:0,
       pension_monthly_at_retirement:num("pension"), pension_cola:0.02, passive_income_annual:num("otherIncome") },
     social_security: { spouse_a_monthly_benefit:num("ssA"), spouse_b_monthly_benefit: couple?num("ssB"):0 },
-    healthcare: { aca_household_size: couple?2:1,
+    healthcare: { aca_household_size: couple ? 2 : (filingStatus==="hoh" ? 1+num("dependents") : 1),
       aca_benchmark_premium_annual: document.getElementById("aca").checked ? 18000 : 0 },
     assumptions: { portfolio_return_base:num("retRate")/100, portfolio_return_conservative:(num("retRate")-2)/100,
       portfolio_return_optimistic:(num("retRate")+1.5)/100, inflation_rate:0.02,

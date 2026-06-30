@@ -81,6 +81,7 @@ def test_validate_accepts_one_member_single():
     # A single (one-member) household is valid and does NOT require the
     # spouse-B income/benefit keys.
     cfg = _good()
+    cfg["household"]["filing_status"] = "single"
     cfg["household"]["members"] = cfg["household"]["members"][:1]
     del cfg["income"]["spouse_b_annual"]
     del cfg["social_security"]["spouse_b_monthly_benefit"]
@@ -92,14 +93,32 @@ def test_validate_rejects_zero_members():
     cfg["household"]["members"] = []
     with pytest.raises(cl.ConfigError) as e:
         cl.validate_config(cfg)
-    assert "1 or 2 members" in str(e.value)
+    assert "non-empty" in str(e.value)
 
 
-def test_validate_rejects_three_members():
-    cfg = _good()
-    cfg["household"]["members"].append(cfg["household"]["members"][0])
-    with pytest.raises(cl.ConfigError):
+def test_validate_mfj_requires_two_earners():
+    cfg = _good()                       # rivera declares filing_status MFJ
+    cfg["household"]["members"] = cfg["household"]["members"][:1]
+    with pytest.raises(cl.ConfigError) as e:
         cl.validate_config(cfg)
+    assert "requires 2 earner members" in str(e.value)
+
+
+def test_validate_accepts_dependent_third_member():
+    # A third member is a dependent: needs only id/display_name/birth_year and
+    # bumps household size; it does not make the config invalid.
+    cfg = _good()
+    cfg["household"]["members"].append(
+        {"id": "dependent_1", "display_name": "Kid", "birth_year": 2012})
+    assert cl.validate_config(cfg) is not None
+
+
+def test_validate_rejects_bad_filing_status():
+    cfg = _good()
+    cfg["household"]["filing_status"] = "jointish"
+    with pytest.raises(cl.ConfigError) as e:
+        cl.validate_config(cfg)
+    assert "filing_status" in str(e.value)
 
 
 def test_validate_rejects_missing_section():

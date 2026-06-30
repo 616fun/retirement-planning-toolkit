@@ -8,6 +8,7 @@
       { "id": "spouse_a", "display_name": "Person A", "birth_year": 1975, "retirement_age": 57, "ss_claim_age": 67 },
       { "id": "spouse_b", "display_name": "Person B", "birth_year": 1973, "retirement_age": 60, "ss_claim_age": 70 }
     ],
+    "_filing_status_comment": "One of 'mfj' (2 earner members), 'single', or 'hoh' (head of household). If omitted, inferred from member count (>=2 -> mfj, else single). One-earner statuses use only the first member; list any dependents as extra members (id/display_name/birth_year only) to bump the ACA household size.",
     "filing_status": "MFJ",
     "state": "XX",
     "state_income_tax_rate": 0.04,
