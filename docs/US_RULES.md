@@ -126,6 +126,28 @@ the MFJ tables above; ✓ = confirmed against Rev. Proc. 2025-32 / CMS 2026 on
   single edge is lower), as do the top IRMAA floor and the §86/NIIT statutory
   bases. Re-verify the single column against the same Rev. Proc. / CMS release.
 
+## Head of household (one-earner with a dependent), 2026
+
+Set `household.filing_status: "hoh"` (or list a dependent member). HOH has its
+own ordinary brackets, standard deduction, and LTCG breakpoints, but uses the
+**single/unmarried** amounts for IRMAA floors, the SS §86 provisional bases, and
+the NIIT threshold (the IRS gives HOH no separate tier for those). ✓ verified
+2026-06-30 against Rev. Proc. 2025-32.
+
+| Item | HOH value | Constant |
+|---|---|---|
+| 10% / 12% / 32% bracket tops | $17,700 / $67,450 / $256,200 | `FEDERAL_BRACKETS_HOH` ✓ |
+| 22% / 24% / 35% bracket tops | $105,700 / $201,775 / $640,600 (= single) | `FEDERAL_BRACKETS_HOH` ✓ |
+| Standard deduction | $24,150 | `STANDARD_DEDUCTION_HOH` ✓ |
+| LTCG 0% / 15% tops | $66,200 / $579,600 | `CAP_GAINS_BRACKETS_HOH` ✓ |
+| IRMAA floors / SS §86 bases / NIIT threshold | same as single | `_IRMAA`/`_SS_PI`/`_NIIT_THRESHOLD["hoh"]` |
+
+**Household model.** Filing status comes from `household.filing_status` (else
+inferred: ≥2 members → MFJ, else single). One-earner statuses (single, HOH) use
+`members[0]` as the sole earner; MFJ uses `members[0]` + `members[1]`. Any further
+members are **dependents** — they need only id / display_name / birth_year and
+add to the default ACA household size (FPL), not to income or Social Security.
+
 ## IRMAA — Medicare premium surcharge, MFJ 2026 (CMS)
 
 `IRMAA_MFJ`, **annual** surcharge **per person** (Part B + Part D combined). CMS

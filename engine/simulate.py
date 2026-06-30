@@ -177,17 +177,19 @@ def simulate(cfg, *, returns=None, strategy="none", target=None, horizon=None,
     m = cfg["household"]["members"]
     inc = cfg["income"]
 
-    # Filing status flows from household size: 1 member -> single, 2 -> MFJ.
-    single = len(m) == 1
-    status = "single" if single else "mfj"
+    # Filing status: explicit household.filing_status wins, else inferred from
+    # the member count (>=2 -> MFJ, else single). Single and head-of-household
+    # are both one-earner households; only MFJ has a second earner.
+    status = tax_us.resolve_filing_status(cfg)
+    one_earner = status != "mfj"
 
     infl = a["inflation_rate"]
     base_ret = a["portfolio_return_base"]
     # Standard deduction: an explicit `standard_deduction` override wins; else the
-    # MFJ config key (for a couple) or the status default (for a single filer).
+    # MFJ config key (for a couple) or the status default (single/HOH/MFJ).
     std0 = a.get("standard_deduction")
     if std0 is None:
-        std0 = a.get("standard_deduction_mfj") if not single else None
+        std0 = a.get("standard_deduction_mfj") if status == "mfj" else None
     if std0 is None:
         std0 = tax_us.standard_deduction(status)
     spend0 = a["retirement_spend_annual"]
@@ -197,9 +199,9 @@ def simulate(cfg, *, returns=None, strategy="none", target=None, horizon=None,
     a_ret = m[0]["retirement_age"]
     a_ss = m[0]["ss_claim_age"]
     a_rmd_start = rmd_start_age(m[0]["birth_year"])
-    # Spouse B drivers are neutral for a single household (no second income, SS,
-    # or Medicare enrollee); b_age tracks spouse A only as an unused ledger column.
-    if single:
+    # Spouse B drivers are neutral for a one-earner household (no second income,
+    # SS, or Medicare enrollee); b_age tracks spouse A only as an unused column.
+    if one_earner:
         b_age0, b_ret, b_ss = a_age0, 0, 999
     else:
         b_age0 = current_age(cfg, "spouse_b")
@@ -221,14 +223,16 @@ def simulate(cfg, *, returns=None, strategy="none", target=None, horizon=None,
     # unless a benchmark premium is configured under cfg["healthcare"].
     hc = cfg.get("healthcare", {})
     aca_benchmark0 = float(hc.get("aca_benchmark_premium_annual", 0) or 0)
-    aca_hh_size = int(hc.get("aca_household_size", 1 if single else 2) or (1 if single else 2))
+    # ACA/FPL household size defaults to the number of listed members (earners +
+    # any dependents); set healthcare.aca_household_size to override.
+    aca_hh_size = int(hc.get("aca_household_size", len(m)) or len(m))
     aca_enhanced = bool(a.get("aca_enhanced_subsidies", False))
 
     pension_m, cola = inc["pension_monthly_at_retirement"], inc["pension_cola"]
     passive0 = inc["passive_income_annual"]
-    b_salary0 = 0.0 if single else inc["spouse_b_annual"]
+    b_salary0 = 0.0 if one_earner else inc["spouse_b_annual"]
     ss_a0 = cfg["social_security"]["spouse_a_monthly_benefit"] * 12
-    ss_b0 = 0.0 if single else cfg["social_security"]["spouse_b_monthly_benefit"] * 12
+    ss_b0 = 0.0 if one_earner else cfg["social_security"]["spouse_b_monthly_benefit"] * 12
 
     if horizon is None:
         horizon = max(1, 90 - a_age0)
@@ -309,7 +313,7 @@ def simulate(cfg, *, returns=None, strategy="none", target=None, horizon=None,
             bracket_top_taxable = tax_us.FEDERAL_BRACKETS[status][2][1] * idx
             ceiling_agi = bracket_top_taxable + std
             if (a_age >= tax_us.MEDICARE_AGE - tax_us.IRMAA_LOOKBACK_YEARS
-                    or (not single and b_age >= tax_us.MEDICARE_AGE - tax_us.IRMAA_LOOKBACK_YEARS)):
+                    or (not one_earner and b_age >= tax_us.MEDICARE_AGE - tax_us.IRMAA_LOOKBACK_YEARS)):
                 ceiling_agi = min(ceiling_agi, irmaa_ceiling)
             conversion = max(0.0, min(ceiling_agi - non_ss, trad - forced))
         else:  # optimal -- fill to a level real target (today's $ AGI)
@@ -327,7 +331,7 @@ def simulate(cfg, *, returns=None, strategy="none", target=None, horizon=None,
 
         # ---- ordinary income tax (fed + state) + the 2-yr-lookback IRMAA ----
         n_medicare = (1 if a_age >= tax_us.MEDICARE_AGE else 0) + \
-                     (0 if single else (1 if b_age >= tax_us.MEDICARE_AGE else 0))
+                     (0 if one_earner else (1 if b_age >= tax_us.MEDICARE_AGE else 0))
         fed = tax_us.federal_tax(ordinary_agi, year, infl, std0, status=status)
         st = tax_us.state_tax(ordinary_agi, cfg, year, infl, ss_income=ss_taxable)
         magi_look = magi_history.get(n - tax_us.IRMAA_LOOKBACK_YEARS, ordinary_agi)
