@@ -63,9 +63,9 @@ def test_irmaa_tiers_step_up():
     t1 = tax_us.irmaa_annual(230000, n_enrolled=2)
     t2 = tax_us.irmaa_annual(300000, n_enrolled=2)
     t4 = tax_us.irmaa_annual(420000, n_enrolled=2)
-    assert t1 == pytest.approx(2 * 1143)
-    assert t2 == pytest.approx(2 * 2867)
-    assert t4 == pytest.approx(2 * 6306)
+    assert t1 == pytest.approx(2 * 1148)   # 2026 CMS
+    assert t2 == pytest.approx(2 * 2885)
+    assert t4 == pytest.approx(2 * 6356)
     assert t1 < t2 < t4
 
 
@@ -205,7 +205,7 @@ def test_single_known_bracket_math():
 def test_single_irmaa_floor_is_lower():
     # $120k MAGI: no surcharge for MFJ (floor $218k) but Tier 1 for single ($109k).
     assert tax_us.irmaa_annual(120000, n_enrolled=1) == 0.0
-    assert tax_us.irmaa_annual(120000, n_enrolled=1, status="single") == pytest.approx(1143)
+    assert tax_us.irmaa_annual(120000, n_enrolled=1, status="single") == pytest.approx(1148)
     assert tax_us.irmaa_tier1_magi(status="single") == pytest.approx(109000)
 
 
@@ -223,6 +223,35 @@ def test_single_niit_threshold_is_200k():
 
 def test_single_ltcg_zero_bracket_is_smaller():
     # A $60k gain on zero ordinary income is all 0% for MFJ but spills into 15%
-    # for single (0% top ~$48.5k).
+    # for single (0% top ~$49.5k).
     assert tax_us.capital_gains_tax(0, 60000) == 0.0
     assert tax_us.capital_gains_tax(0, 60000, status="single") > 0.0
+
+
+# ---- verified 2026 constants (drift guard for the annual re-verification) --
+# These lock the figures confirmed/corrected on 2026-06-30 against Rev. Proc.
+# 2025-32 and the CMS 2026 IRMAA fact sheet (see docs/US_RULES.md verification
+# log). If a value here changes, re-confirm it against the primary source and
+# bump the log rather than just editing the number.
+def test_verified_2026_federal_and_std_deduction():
+    assert [b[1] for b in tax_us.FEDERAL_BRACKETS_MFJ] == \
+        [24800, 100800, 211400, 403550, 512450, 768700, None]
+    assert [b[1] for b in tax_us.FEDERAL_BRACKETS_SINGLE] == \
+        [12400, 50400, 105700, 201775, 256225, 640600, None]
+    assert tax_us.STANDARD_DEDUCTION_MFJ == 32200
+    assert tax_us.STANDARD_DEDUCTION_SINGLE == 16100
+
+
+def test_verified_2026_irmaa():
+    assert [f for f, _ in tax_us.IRMAA_MFJ] == [0, 218000, 274000, 342000, 410000, 750000]
+    assert [f for f, _ in tax_us.IRMAA_SINGLE] == [0, 109000, 137000, 171000, 205000, 500000]
+    # Per-person annual surcharge dollars are identical across filing status.
+    assert [s for _, s in tax_us.IRMAA_MFJ] == [0.0, 1148.0, 2885.0, 4620.0, 6356.0, 6936.0]
+    assert [s for _, s in tax_us.IRMAA_SINGLE] == [s for _, s in tax_us.IRMAA_MFJ]
+
+
+def test_verified_2026_ltcg_and_fpl():
+    assert [e for _, e in tax_us.CAP_GAINS_BRACKETS_MFJ] == [98900, 613700, None]
+    assert [e for _, e in tax_us.CAP_GAINS_BRACKETS_SINGLE] == [49450, 545500, None]
+    assert tax_us.FPL_BASE_1PERSON == 15650.0
+    assert tax_us.FPL_PER_ADDL_PERSON == 5500.0
