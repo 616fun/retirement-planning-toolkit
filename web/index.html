@@ -157,6 +157,7 @@
           <div class="field"><label>State income tax rate <span class="hint">% (0 if none)</span></label><input type="number" id="stateRate" value="5" min="0" max="15" step="0.1"></div>
           <div class="field"><label>Expected investment return <span class="hint">% per year</span></label><input type="number" id="retRate" value="7.5" min="0" max="12" step="0.1"></div>
         </div>
+        <label class="check" style="margin-top:10px"><input type="checkbox" id="guardrails"> Adjust my spending to the market <span class="hint">(spend less after bad years, more after good — "guardrails")</span></label>
       </details>
     </div>
 
@@ -216,6 +217,7 @@ function buildConfig(){
     social_security: { spouse_a_monthly_benefit:num("ssA"), spouse_b_monthly_benefit: couple?num("ssB"):0 },
     healthcare: { aca_household_size: couple ? 2 : (filingStatus==="hoh" ? 1+num("dependents") : 1),
       aca_benchmark_premium_annual: document.getElementById("aca").checked ? 18000 : 0 },
+    spending: { guardrails: { enabled: document.getElementById("guardrails").checked } },
     assumptions: { portfolio_return_base:num("retRate")/100, portfolio_return_conservative:(num("retRate")-2)/100,
       portfolio_return_optimistic:(num("retRate")+1.5)/100, inflation_rate:0.02,
       retirement_spend_annual: num("monthlySpend")*12, target_equity_pct:65, target_bond_pct:35,
