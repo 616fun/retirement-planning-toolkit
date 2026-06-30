@@ -99,6 +99,64 @@ def test_single_build_model_tabs_do_not_crash():
     assert "Avery" in text
 
 
+# ---- withdrawal sequencing (Phase 2b) ------------------------------------
+def test_withdrawal_order_defaults_and_fills_missing():
+    assert sim.withdrawal_order({}) == ["taxable", "pretax", "roth"]
+    # A partial order keeps the requested lead and appends the rest.
+    assert sim.withdrawal_order({"withdrawal_order": ["roth"]}) == ["roth", "taxable", "pretax"]
+    assert sim.withdrawal_order({"withdrawal_order": ["pretax", "taxable"]}) == \
+        ["pretax", "taxable", "roth"]
+    # Unknown bucket names are ignored, not stranded.
+    assert sim.withdrawal_order({"withdrawal_order": ["bogus", "roth"]}) == \
+        ["roth", "taxable", "pretax"]
+
+
+def _first_drawing_row(r):
+    """The first ledger row that pulls anything from the portfolio."""
+    for row in r["ledger"]:
+        if row["draw_taxable"] + row["draw_trad"] + row["draw_roth"] > 1:
+            return row
+    return None
+
+
+def test_withdrawal_order_changes_which_bucket_is_hit_first():
+    # Over a long horizon with growth, cumulative draws are non-monotonic (a
+    # pool left untouched keeps compounding). The order's effect is clearest on
+    # the FIRST year money is pulled: that bucket is decided purely by the order.
+    base = _cfg()
+    base["assumptions"]["retirement_spend_annual"] = 220000   # force real draws
+
+    default = _first_drawing_row(sim.simulate(copy.deepcopy(base), strategy="none"))
+    assert default["draw_taxable"] > 0 and default["draw_roth"] == 0   # taxable first
+
+    rf_cfg = copy.deepcopy(base); rf_cfg["withdrawal_order"] = ["roth", "pretax", "taxable"]
+    rf = _first_drawing_row(sim.simulate(rf_cfg, strategy="none"))
+    assert rf["draw_roth"] > 0 and rf["draw_taxable"] == 0             # Roth first
+
+    pt_cfg = copy.deepcopy(base); pt_cfg["withdrawal_order"] = ["pretax", "taxable", "roth"]
+    pt = _first_drawing_row(sim.simulate(pt_cfg, strategy="none"))
+    assert pt["draw_trad"] > 0 and pt["draw_roth"] == 0               # pre-tax first
+
+
+def test_withdrawal_order_keeps_plan_solvent():
+    # Reordering the buckets shifts WHERE money comes from; a solvent default
+    # plan stays solvent under an alternative order.
+    base = _cfg()
+    base["assumptions"]["retirement_spend_annual"] = 200000
+    a = sim.simulate(copy.deepcopy(base), strategy="none")
+    b_cfg = copy.deepcopy(base); b_cfg["withdrawal_order"] = ["pretax", "taxable", "roth"]
+    b = sim.simulate(b_cfg, strategy="none")
+    assert not a["insolvent"] and not b["insolvent"]
+
+
+def test_invalid_withdrawal_order_rejected():
+    cfg = _cfg()
+    cfg["withdrawal_order"] = ["roth", "bonds"]
+    with pytest.raises(cl.ConfigError) as e:
+        cl.validate_config(cfg)
+    assert "withdrawal_order" in str(e.value)
+
+
 # ---- ledger contract -----------------------------------------------------
 def test_ledger_covers_every_year_to_horizon():
     cfg = _cfg()

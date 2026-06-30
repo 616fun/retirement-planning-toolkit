@@ -138,6 +138,14 @@ def validate_config(cfg):
         if v is not None and not _is_number(v):
             errors.append(f"household.{k} must be a number (got {v!r})")
 
+    # Optional decumulation order: a list drawn from the three tax buckets.
+    wo = cfg.get("withdrawal_order")
+    if wo is not None and (not isinstance(wo, list)
+                           or any(b not in ("taxable", "pretax", "roth") for b in wo)):
+        errors.append(
+            "withdrawal_order must be a list drawn from "
+            "['pretax', 'roth', 'taxable'] (got " + repr(wo) + ").")
+
     if errors:
         raise ConfigError(
             "Config validation failed (" + cfg.get("_resolved_path", "config") + "):\n  - "
