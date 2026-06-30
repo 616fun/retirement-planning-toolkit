@@ -82,7 +82,9 @@
     ],
     "lumpy": [
       { "year": 2034, "amount": 40000, "label": "replace vehicle" }
-    ]
+    ],
+    "_guardrails_comment": "Optional Guyton-Klinger dynamic spending: when enabled, real spending is cut after bad markets (when the withdrawal rate climbs >upper above its start) and raised after good ones (>lower below). Classic settings shown; omit or set enabled:false for static inflation-adjusted spending.",
+    "guardrails": { "enabled": false, "upper": 0.20, "lower": 0.20, "cut": 0.10, "raise": 0.10 }
   },
 
   "_withdrawal_order_comment": "Optional. Decumulation order across the three tax buckets when spending exceeds income. Default ['taxable','pretax','roth'] lets the tax-advantaged pools compound longest. Reorder to e.g. ['pretax','taxable','roth'] to draw pre-tax first (smaller RMDs / estate later), or put 'roth' last to preserve the tax-free pool. Any omitted bucket is appended automatically. Omit the key for the default.",

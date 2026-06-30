@@ -135,6 +135,21 @@ def lumpy_expense(cfg, year, idx):
     return total
 
 
+def guardrail_params(cfg):
+    """Guyton-Klinger dynamic-spending guardrails from cfg["spending"]["guardrails"],
+    or None when not enabled. Returns the upper/lower withdrawal-rate bands and the
+    cut/raise step. Defaults are the classic 20% bands with a 10% adjustment."""
+    g = cfg.get("spending", {}).get("guardrails")
+    if not g or not g.get("enabled"):
+        return None
+    return {
+        "upper": float(g.get("upper", 0.20)),   # cut when rate is >20% above the start
+        "lower": float(g.get("lower", 0.20)),   # raise when >20% below the start
+        "cut": float(g.get("cut", 0.10)),       # spending cut size
+        "raise": float(g.get("raise", 0.10)),   # spending raise size
+    }
+
+
 def _return_at(returns, n, default):
     """Resolve the nominal return for year index n from `returns`, which may be
     None (use the config base rate), a constant float, a callable(n)->rate, or a
@@ -252,6 +267,12 @@ def simulate(cfg, *, returns=None, strategy="none", target=None, horizon=None,
     # and the per-year draw/gain accumulators in place.
     draw_taxable = draw_trad = draw_roth = realized_gain = 0.0
 
+    # Guyton-Klinger guardrails: ratchet real spending down/up as the current
+    # withdrawal rate drifts above/below its starting level (None = off).
+    gr = guardrail_params(cfg)
+    guard_factor = 1.0
+    guard_rate0 = None
+
     def _pull(amount):
         nonlocal taxable, taxable_basis, trad, roth
         nonlocal draw_taxable, draw_trad, draw_roth, realized_gain, insolvent
@@ -294,7 +315,21 @@ def simulate(cfg, *, returns=None, strategy="none", target=None, horizon=None,
         std = std0 * idx
         # Spending = inflation-adjusted base x the retirement-smile multiplier,
         # plus any lumpy one-time expenses scheduled for the year.
-        spend = spend0 * idx * spending_multiplier(cfg, a_age) + lumpy_expense(cfg, year, idx)
+        recurring = spend0 * idx * spending_multiplier(cfg, a_age)
+        # Guyton-Klinger guardrails adjust the recurring slice based on how the
+        # current withdrawal rate compares to the rate at the start of retirement.
+        if gr is not None:
+            portfolio = trad + roth + taxable
+            if portfolio > 0:
+                if guard_rate0 is None:
+                    guard_rate0 = recurring / portfolio          # anchor at retirement
+                else:
+                    cur_rate = recurring * guard_factor / portfolio
+                    if cur_rate > guard_rate0 * (1 + gr["upper"]):
+                        guard_factor *= (1 - gr["cut"])          # capital-preservation cut
+                    elif cur_rate < guard_rate0 * (1 - gr["lower"]):
+                        guard_factor *= (1 + gr["raise"])        # prosperity raise
+        spend = recurring * guard_factor + lumpy_expense(cfg, year, idx)
         pension = pension_m * 12 * ((1 + cola) ** max(0, a_age - a_ret))
         passive = passive0 * idx
         b_work = b_salary0 * idx if b_age < b_ret else 0.0

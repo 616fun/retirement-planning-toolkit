@@ -182,6 +182,55 @@ def test_invalid_withdrawal_order_rejected():
     assert "withdrawal_order" in str(e.value)
 
 
+# ---- dynamic spending guardrails (Phase 3, Guyton-Klinger) ---------------
+def test_guardrail_params_off_by_default():
+    assert sim.guardrail_params(_cfg()) is None
+    assert sim.guardrail_params({"spending": {"guardrails": {"enabled": False}}}) is None
+    p = sim.guardrail_params({"spending": {"guardrails": {"enabled": True}}})
+    assert p == {"upper": 0.20, "lower": 0.20, "cut": 0.10, "raise": 0.10}
+    p2 = sim.guardrail_params({"spending": {"guardrails": {"enabled": True, "cut": 0.15}}})
+    assert p2["cut"] == 0.15
+
+
+def test_guardrails_off_matches_no_guardrails():
+    # Disabled guardrails must not perturb the plan at all.
+    base = sim.simulate(_cfg(), strategy="none")
+    off = copy.deepcopy(_cfg()); off["spending"] = {"guardrails": {"enabled": False}}
+    assert sim.simulate(off, strategy="none")["total_tax"] == pytest.approx(base["total_tax"])
+
+
+def _final_retired_spend(r):
+    return [row["spend"] for row in r["ledger"] if row["phase"] == "retired"][-1]
+
+
+def test_guardrails_cut_spending_in_a_poor_market():
+    # A flat 0% nominal return drives the withdrawal rate up -> capital-
+    # preservation cuts pull late-life spending well below the un-guarded path.
+    cfg = _cfg(); cfg["assumptions"]["retirement_spend_annual"] = 240000
+    g = copy.deepcopy(cfg); g["spending"] = {"guardrails": {"enabled": True}}
+    no_gr = sim.simulate(cfg, returns=0.0, strategy="none")
+    gr = sim.simulate(g, returns=0.0, strategy="none")
+    assert _final_retired_spend(gr) < _final_retired_spend(no_gr)
+
+
+def test_guardrails_raise_spending_in_a_strong_market():
+    # Sustained high returns drop the withdrawal rate -> the prosperity rule
+    # raises spending above the un-guarded (inflation-only) path.
+    cfg = _cfg()
+    g = copy.deepcopy(cfg); g["spending"] = {"guardrails": {"enabled": True}}
+    no_gr = sim.simulate(cfg, returns=0.10, strategy="none")
+    gr = sim.simulate(g, returns=0.10, strategy="none")
+    assert _final_retired_spend(gr) > _final_retired_spend(no_gr)
+
+
+def test_guardrails_lift_monte_carlo_success():
+    cfg = _cfg(); cfg["assumptions"]["retirement_spend_annual"] = 240000
+    g = copy.deepcopy(cfg); g["spending"] = {"guardrails": {"enabled": True}}
+    base = sim.monte_carlo(cfg, n_sims=300, strategy="none")
+    with_gr = sim.monte_carlo(g, n_sims=300, strategy="none")
+    assert with_gr["success_rate"] > base["success_rate"]
+
+
 # ---- ledger contract -----------------------------------------------------
 def test_ledger_covers_every_year_to_horizon():
     cfg = _cfg()
